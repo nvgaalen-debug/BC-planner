@@ -193,3 +193,34 @@ body.sleep{cursor:grabbing;user-select:none}
 .gbar{position:absolute;height:20px;line-height:20px;border-radius:5px;background:var(--blk);color:#fff;font-size:11.5px;font-weight:650;text-align:center;overflow:hidden;white-space:nowrap;cursor:pointer;box-shadow:var(--shadow-sm)}
 .g-task{position:absolute;height:20px;line-height:20px;border-radius:6px;background:color-mix(in srgb,var(--accent) 30%,var(--surface));border:1px solid var(--accent);color:var(--ink);font-size:11.5px;font-weight:600;padding:0 6px;overflow:hidden;white-space:nowrap;cursor:pointer}
 .g-pijlen{position:absolute;left:0;top:0;pointer-events:none;z-index:1}
+
+/* Slepen: bars en blokken laten de muis door, zodat de cel eronder wordt gevonden */
+body.sleep .gbar,body.sleep .blk,body.sleep .g-task{pointer-events:none}
+.g-drop{position:absolute;z-index:0}
+.g-drop:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.g-drop.dropov{background:color-mix(in srgb,var(--accent) 18%,transparent);box-shadow:inset 0 0 0 2px var(--accent)}
+table.cap td.cel{height:72px;text-align:center;vertical-align:middle;cursor:pointer}
+table.cap td.cel .cap-pct{font-weight:650;font-size:14px}
+table.cap td.cel small{display:block;color:var(--muted);font-size:11.5px}
+table.cap td.cel .cap-pr{color:var(--ink);font-size:11px;white-space:normal;margin-top:2px}
+table.cap th small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+
+.print-kop{display:none}
+@media print {
+  @page{size:A4 landscape;margin:10mm}
+  body{background:#fff;color:#000;font-size:10px}
+  .top,.toast,#ctxMenu,#detailModal,#pwModal,#bpwModal,.ong,.pl-top,.print-hide,.navmenu{display:none!important}
+  main{padding:0;max-width:none}
+  .print-kop{display:block;font-size:14px;margin:0 0 8px}
+  .panel{box-shadow:none;border:0;padding:0;background:#fff}
+  .sec{gap:6px}
+  .pl-wrap{display:block}
+  .grid-wrap{overflow:visible;border:0}
+  table.plan{min-width:0;font-size:9px}
+  table.plan th,table.plan td{border-color:#999}
+  td.cel{height:auto;min-width:0;padding:2px}
+  .blk,.gbar,.g-task,td.cel.s-vol,td.cel.s-over,td.cel.s-gep,td.cel.s-vrij,.lg-vrij,.lg-gep,.lg-vol,.lg-over{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .gantt{zoom:.62}
+  table.cap{zoom:.9}
+  .legend{font-size:9px}
+}

@@ -2,13 +2,14 @@
 const MENU_ITEMS = {
   "tab:overzicht": ["Planning", ""],
   "tab:gantt": ["Gantt", "Planning over tijd per resource of project"],
+  "tab:capaciteit": ["Bezetting", "Bezetting per week, acht weken vooruit"],
   "tab:instellingen": ["Instellingen", ""],
   "act:beheerlock": ["Beheer vergrendelen", "Verberg het Beheer-menu weer tot het wachtwoord opnieuw is ingevuld"],
   "act:logout": ["Uitloggen", "Vergeet het wachtwoord op dit tabblad"],
 };
 function menuCfg() {
   return {
-    top: ["tab:overzicht", "tab:gantt", "g:beheer"],
+    top: ["tab:overzicht", "tab:gantt", "tab:capaciteit", "g:beheer"],
     groups: { beheer: { l: "Beheer", items: ["tab:instellingen", "act:beheerlock", "act:logout"] } },
   };
 }

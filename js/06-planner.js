@@ -62,6 +62,9 @@ function ensureData() {
 }
 ensureData();
 
+/* Wijziging opslaan op de server en het scherm verversen. */
+function save() { pushState(); render(); }
+
 /* ---------- rekenregels ---------- */
 const plannedFor = (res, datum) => D.planning.filter((l) => l.resource === res && l.datum === datum).reduce((a, l) => a + l.uren, 0);
 const verlofFor = (res, datum) => D.verlof.filter((v) => v.resource === res && v.datum === datum).reduce((a, v) => a + v.uren, 0);
@@ -138,6 +141,7 @@ function viewPlanner() {
         <span class="sp"></span>
         <span class="chip">${totaalNog} u nog te plannen</span>
       </div>
+      ${printBalk("Planning per week")}
       <div class="pl-wrap">
         <aside class="ong">
           <h3>Ongepland</h3>
@@ -176,8 +180,69 @@ function viewInstellingen() {
 function viewTab() {
   if (S.tab === "instellingen") return viewInstellingen();
   if (S.tab === "gantt") return viewGantt();
+  if (S.tab === "capaciteit") return viewCapaciteit();
   return viewPlanner();
 }
+
+/* ---------- Bezetting per week: horizon van 8 weken, met de projecten die op een resource concurreren ---------- */
+function viewCapaciteit() {
+  ensureData();
+  const mon = maandag(S.week || undefined);
+  const weken = Array.from({ length: 8 }, (_, i) => addDays(mon, i * 7));
+  const kop = weken.map((w) => `<th>wk ${isoWeek(w)}<small>${kortDatum(w)}</small></th>`).join("");
+  let rijen = "";
+  for (const g of D.groepen) {
+    rijen += `<tr class="grp"><td colspan="${weken.length + 1}">${esc(g)}</td></tr>`;
+    for (const r of D.resources.filter((x) => x.groep === g)) {
+      const cellen = weken.map((w) => {
+        const dagen = [0, 1, 2, 3, 4].map((i) => addDays(w, i));
+        const cap = dagen.reduce((a, d) => a + capFor(r.id, d), 0);
+        const gep = dagen.reduce((a, d) => a + plannedFor(r.id, d), 0);
+        const pct = cap > 0 ? Math.round((gep / cap) * 100) : null;
+        const st = cap === 0 && gep === 0 ? "na" : gep > cap ? "over" : gep > 0 && gep === cap ? "vol" : gep > 0 ? "gep" : "vrij";
+        const projecten = [...new Set(D.planning.filter((l) => l.resource === r.id && dagen.includes(l.datum))
+          .map((l) => { const t = D.taken.find((x) => x.id === l.taak); const pr = t && D.projecten.find((x) => x.id === t.project); return pr ? pr.nr : ""; }).filter(Boolean))];
+        return `<td class="cel s-${st}" data-week="${w}" title="${LABEL[st]}">
+          <div class="cap-pct">${pct === null ? "–" : pct + "%"}</div>
+          <small>${gep}/${cap}u</small>
+          ${projecten.length ? `<small class="cap-pr">${esc(projecten.join(", "))}</small>` : ""}</td>`;
+      }).join("");
+      rijen += `<tr><th class="res">${esc(r.naam)}<small>${r.uren * 5}u per week</small></th>${cellen}</tr>`;
+    }
+  }
+  return `<section class="sec pl">
+    <div class="panel sec">
+      <div class="row pl-top">
+        <button class="btn" data-act="capweek" data-d="-7">‹ Vorige</button>
+        <button class="btn" data-act="capweek" data-d="0">Deze week</button>
+        <button class="btn" data-act="capweek" data-d="7">Volgende ›</button>
+        <b>8 weken vanaf ${kortDatum(weken[0])}</b>
+        <span class="sp"></span>
+        <span class="note">Klik op een week om die in de planning te bekijken</span>
+      </div>
+      ${printBalk("Bezetting per week")}
+      <div class="grid-wrap">
+        <table class="plan cap">
+          <thead><tr><th>Resource</th>${kop}</tr></thead>
+          <tbody>${rijen}</tbody>
+        </table>
+      </div>
+      <div class="row legend">
+        <span class="chip lg-vrij">Onder 1%</span>
+        <span class="chip lg-gep">Gepland</span>
+        <span class="chip lg-vol">100%</span>
+        <span class="chip lg-over">Over 100%</span>
+        <span class="chip lg-na">Niet beschikbaar</span>
+      </div>
+    </div>
+  </section>`;
+}
+const isoWeek = (s) => {
+  const d = pYmd(s); const dag = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dag + 3);
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - jan4) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+};
 
 /* ---------- Gantt: resource-weergave en project-weergave over vier weken ---------- */
 const GW = 44, GLABEL = 220, GDAGEN = 28, GROWH = 30, GLANE = 24;
@@ -206,11 +271,12 @@ function viewGantt() {
         const balken = lijnen.map((l) => {
           const k = per[l.datum] || 0; per[l.datum] = k + 1; lanes = Math.max(lanes, k + 1);
           const t = D.taken.find((x) => x.id === l.taak), pr = t && D.projecten.find((x) => x.id === t.project);
-          return `<div class="gbar" data-id="${esc(l.id)}" title="${esc(pr ? pr.nr : "")} · ${esc(t ? t.omschrijving : "")} · ${l.uren}u" style="left:${xVan(l.datum) + 2}px;top:${hoogte + 4 + k * GLANE}px;width:${GW - 4}px">${l.uren}u</div>`;
+          return `<div class="gbar" data-drag="plan" data-id="${esc(l.id)}" title="${esc(pr ? pr.nr : "")} · ${esc(t ? t.omschrijving : "")} · ${l.uren}u" style="left:${xVan(l.datum) + 2}px;top:${hoogte + 4 + k * GLANE}px;width:${GW - 4}px">${l.uren}u</div>`;
         }).join("");
         const h = lanes * GLANE + 8;
+        const dropCellen = dagen.map((d, i) => `<div class="g-drop" data-drop="1" data-res="${esc(r.id)}" data-date="${d}" style="left:${GLABEL + i * GW}px;top:${hoogte}px;width:${GW}px;height:${h}px"></div>`).join("");
         inhoud += `<div class="g-lbl" style="top:${hoogte}px;height:${h}px">${esc(r.naam)}<small>${r.uren}u/dag</small></div>` +
-          `<div class="g-lane" style="top:${hoogte}px;height:${h}px;left:${GLABEL}px;width:${GDAGEN * GW}px"></div>${balken}`;
+          `<div class="g-lane" style="top:${hoogte}px;height:${h}px;left:${GLABEL}px;width:${GDAGEN * GW}px"></div>${dropCellen}${balken}`;
         hoogte += h;
       }
     }
@@ -263,6 +329,7 @@ function viewGantt() {
           <button class="tab" data-act="gmode" data-m="proj" aria-pressed="${modus === "proj"}">Per project</button>
         </div>
       </div>
+      ${printBalk(modus === "res" ? "Gantt per resource" : "Gantt per project")}
       <div class="grid-wrap">
         <div class="gantt" style="width:${breedte}px;height:${hoogteTotaal}px">
           <div class="g-kop" style="width:${breedte}px"><div class="g-day g-leeg" style="left:0;width:${GLABEL}px">${modus === "res" ? "Resource" : "Project / taak"}</div>${kopHtml}</div>
@@ -272,6 +339,13 @@ function viewGantt() {
       </div>
     </div>
   </section>`;
+}
+
+/* ---------- afdrukken ---------- */
+function printBalk(titel) {
+  const vandaag = new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+  return `<div class="row print-hide" style="justify-content:flex-end"><button class="btn" data-act="print">Afdrukken</button></div>
+    <h2 class="print-kop">${esc(D.settings?.titel || "BC Resource Planner")} · ${esc(titel)} · ${vandaag}</h2>`;
 }
 
 /* ---------- acties ---------- */
@@ -415,7 +489,7 @@ document.addEventListener("click", (e) => {
   const kies = e.target.closest("#ctxMenu [data-taak]");
   if (kies) { hideCtx(); planTaak(kies.dataset.taak, kies.dataset.res, kies.dataset.date); return; }
   if (!e.target.closest("#ctxMenu")) hideCtx();
-  const b = e.target.closest("[data-act='week'], [data-act='plandel'], [data-act='minu'], [data-act='plusu'], [data-act='voorstel'], [data-act='gmode']");
+  const b = e.target.closest("[data-act='week'], [data-act='plandel'], [data-act='minu'], [data-act='plusu'], [data-act='voorstel'], [data-act='gmode'], [data-act='capweek'], [data-act='print']");
   if (b) {
     const a = b.dataset.act;
     if (a === "week") {
@@ -423,13 +497,17 @@ document.addEventListener("click", (e) => {
       S.week = n ? addDays(S.week || maandag(), n) : maandag();
       render(); return;
     }
+    if (a === "print") { window.print(); return; }
     if (a === "gmode") { S.gmode = b.dataset.m; render(); return; }
+    if (a === "capweek") { const n = Number(b.dataset.d); S.week = n ? addDays(maandag(S.week || undefined), n) : maandag(); render(); return; }
     if (a === "voorstel") { toonVoorstel(b.dataset.id); return; }
     if (a === "minu") { wijzigUren(b.dataset.id, -1); return; }
     if (a === "plusu") { wijzigUren(b.dataset.id, 1); return; }
     D.planning = D.planning.filter((x) => x.id !== b.dataset.id);
     save(); return;
   }
+  const cap = e.target.closest("table.cap td.cel");
+  if (cap) { S.week = cap.dataset.week; S.tab = "overzicht"; render(); return; }
   const blk = e.target.closest(".blk, .gbar, .g-task");
   if (blk && blk.dataset.id) toonDetail(blk.dataset.id);
 });
