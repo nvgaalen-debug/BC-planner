@@ -1,0 +1,16 @@
+{
+  "name": "bc-resource-planner-tests",
+  "private": true,
+  "type": "module",
+  "description": "Rooktest: motortests (node:test), API-tests (node:test tegen de echte Azure Function-handlers) en browsertests (Playwright) tegen een lokale testserver.",
+  "scripts": {
+    "test": "npm run motor && npm run api && npm run browser",
+    "motor": "node --test engine/*.test.mjs",
+    "api": "node --experimental-loader=./server/loader.mjs --test api/*.test.mjs",
+    "browser": "playwright test",
+    "server": "node server/server.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.0"
+  }
+}

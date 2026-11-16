@@ -1,0 +1,5 @@
+{
+  "name": "bc-resource-planner",
+  "private": true,
+  "description": "BC Resource Planner: weekplanning van resources op Business Central-projecten (vanilla JS + Azure Static Web Apps)."
+}
