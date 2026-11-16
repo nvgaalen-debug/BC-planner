@@ -292,14 +292,17 @@ function viewGantt() {
         inhoud += `<div class="g-lbl g-task-lbl" style="top:${y}px;height:${GROWH}px">${esc(t.omschrijving)} <small>${esc(t.groep)}</small></div>`;
         if (lijnen.length) {
           const a = lijnen[0], b = lijnen[lijnen.length - 1];
-          const x1 = xVan(a < dagen[0] ? dagen[0] : a) ?? GLABEL;
-          const eindIdx = dagen.indexOf(b > dagen[dagen.length - 1] ? dagen[dagen.length - 1] : b);
-          const x2 = eindIdx >= 0 ? GLABEL + (eindIdx + 1) * GW - 4 : null;
-          const id = D.planning.find((l) => l.taak === t.id).id;
-          const gepl = t.budget - restUren(t);
-          if (x2 !== null && x1 !== undefined) {
-            inhoud += `<div class="g-task" data-id="${esc(id)}" title="${gepl}u van ${t.budget}u gepland" style="left:${x1 + 2}px;top:${y + 7}px;width:${Math.max(GW - 4, x2 - x1 - 2)}px">${gepl}u / ${t.budget}u</div>`;
-            t._x = [x1 + 2, x2, y + 7 + 8];
+          const first = dagen[0], last = dagen[dagen.length - 1];
+          // Knip de balk tot het zichtbare bereik; buiten het bereik geen balk.
+          if (b >= first && a <= last) {
+            const s0 = a <= first ? 0 : dagen.findIndex((x) => x >= a);
+            let e0 = 0;
+            dagen.forEach((x, i) => { if (x <= b) e0 = i; });
+            const x1 = GLABEL + s0 * GW + 2, x2 = GLABEL + (e0 + 1) * GW - 4;
+            const id = D.planning.find((l) => l.taak === t.id).id;
+            const gepl = t.budget - restUren(t);
+            inhoud += `<div class="g-task" data-id="${esc(id)}" title="${gepl}u van ${t.budget}u gepland" style="left:${x1}px;top:${y + 7}px;width:${Math.max(GW - 4, x2 - x1)}px">${gepl}u / ${t.budget}u</div>`;
+            t._x = [x1, x2, y + 7 + 8];
           }
         }
         hoogte += GROWH;
@@ -374,18 +377,76 @@ function voorgangerOk(t, datum) {
   return true;
 }
 
-/* Na het verschuiven van een voorganger: opvolgers die te vroeg beginnen schuiven mee. */
-function opvolgersVerschuiven(taakId) {
-  const eind = datumsVan(taakId).slice(-1)[0];
-  if (!eind) return;
-  for (const b of D.taken.filter((x) => x.voorganger === taakId)) {
-    const bd = datumsVan(b.id);
-    if (!bd.length || bd[0] > eind) continue;
-    const doel = werkdag(eind, 1);
-    const k = werkdagenTussen(bd[0], doel);
-    for (const l of D.planning.filter((x) => x.taak === b.id)) l.datum = werkdag(l.datum, k);
-    toast(`${b.omschrijving} is ${k} werkdag(en) later gezet.`, 4000);
-    opvolgersVerschuiven(b.id);
+/* Keten-preview: berekent het gevolg van een verplaatsing op een kopie van de planning.
+   Er wordt niets opgeslagen. Per opvolger wordt elk blok apart gecontroleerd op capaciteit,
+   verlof en deadline; een blok dat niet past blijft staan en krijgt een conflict. */
+function previewKeten(taakId, wijzigingen) {
+  const origineel = new Map(D.planning.map((l) => [l.id, { ...l }]));
+  const shadow = D.planning.map((l) => ({ ...l }));
+  const vrijOp = (resId, datum, uitgezonderd) =>
+    capFor(resId, datum) - shadow.filter((x) => x.id !== uitgezonderd && x.resource === resId && x.datum === datum).reduce((a, x) => a + x.uren, 0);
+  const lijnenVan = (tid) => shadow.filter((x) => x.taak === tid);
+  const conflicten = [];
+  const opvolgers = [];
+  for (const w of wijzigingen) {
+    const s = shadow.find((x) => x.id === w.id);
+    if (!s) continue;
+    s.datum = w.datum; s.resource = w.resource;
+    if (w.uren !== undefined) s.uren = w.uren;
+    if (vrijOp(s.resource, s.datum, s.id) < s.uren) {
+      const r = D.resources.find((x) => x.id === s.resource);
+      conflicten.push({ taak: D.taken.find((x) => x.id === s.taak), tekst: `${r ? r.naam : "Resource"} heeft op ${kortDatum(s.datum)} onvoldoende capaciteit voor ${s.uren}u.` });
+    }
+  }
+
+  function volg(id, eind, pad) {
+    for (const b of D.taken.filter((x) => x.voorganger === id)) {
+      if (pad.includes(b.id)) { conflicten.push({ taak: b, tekst: `Circulaire afhankelijkheid bij ${b.omschrijving}.` }); continue; }
+      const lijnen = lijnenVan(b.id);
+      if (!lijnen.length) continue;
+      const start = lijnen.map((l) => l.datum).sort()[0];
+      if (start > eind) continue;
+      const k = werkdagenTussen(start, werkdag(eind, 1 + (b.lag || 0)));
+      for (const l of lijnen.sort((a, c) => (a.datum < c.datum ? 1 : -1))) {
+        const nieuw = werkdag(l.datum, k);
+        if (vrijOp(l.resource, nieuw, l.id) >= l.uren) {
+          l.datum = nieuw;
+        } else {
+          const r = D.resources.find((x) => x.id === l.resource);
+          conflicten.push({ taak: b, tekst: `${r ? r.naam : "Resource"} heeft op ${kortDatum(nieuw)} onvoldoende capaciteit voor ${l.uren}u; blok blijft op ${kortDatum(l.datum)}.` });
+        }
+      }
+      const nieuweEind = lijnenVan(b.id).map((l) => l.datum).sort().slice(-1)[0];
+      if (b.deadline && nieuweEind > b.deadline) conflicten.push({ taak: b, tekst: `Deadline ${kortDatum(b.deadline)} wordt overschreden.` });
+      const oudeStart = [...origineel.values()].filter((l) => l.taak === b.id).map((l) => l.datum).sort()[0];
+      const nieuweStart = lijnenVan(b.id).map((l) => l.datum).sort()[0];
+      opvolgers.push({ taak: b, oudeStart, nieuweStart, totaal: nieuweStart > oudeStart ? werkdagenTussen(oudeStart, nieuweStart) : 0, nieuweEind });
+      volg(b.id, nieuweEind, [...pad, b.id]);
+    }
+  }
+
+  const eind0 = lijnenVan(taakId).map((l) => l.datum).sort().slice(-1)[0];
+  if (eind0) volg(taakId, eind0, [taakId]);
+
+  const blokken = shadow.filter((s) => {
+    const o = origineel.get(s.id);
+    return o && (o.datum !== s.datum || o.resource !== s.resource || o.uren !== s.uren);
+  }).map((s) => ({ id: s.id, datum: s.datum, resource: s.resource, uren: s.uren }));
+
+  const projectIds = [...new Set(D.taken.filter((x) => x.id === taakId || opvolgers.some((o) => o.taak.id === x.id)).map((x) => x.project))];
+  const projEind = (src, pid) => src.filter((l) => { const t = D.taken.find((x) => x.id === l.taak); return t && t.project === pid; }).map((l) => l.datum).sort().slice(-1)[0];
+  const projecten = projectIds.map((pid) => {
+    const p = D.projecten.find((x) => x.id === pid);
+    return { naam: p ? `${p.nr} ${p.naam}` : pid, voor: projEind([...origineel.values()], pid), na: projEind(shadow, pid) };
+  });
+
+  return { blokken, opvolgers, conflicten, projecten };
+}
+
+function doorvoerenKeten(prev) {
+  for (const c of prev.blokken) {
+    const l = D.planning.find((x) => x.id === c.id);
+    if (l) { l.datum = c.datum; l.resource = c.resource; if (c.uren !== undefined) l.uren = c.uren; }
   }
 }
 
@@ -428,16 +489,52 @@ function planTaak(taakId, resId, datum) {
   save();
 }
 
+/* Verplaatsen: eerst berekenen (preview), pas na bevestiging opslaan. */
 function verplaatsPlan(id, resId, datum) {
   const l = D.planning.find((x) => x.id === id);
   if (!l || (l.resource === resId && l.datum === datum)) return;
   const t = D.taken.find((x) => x.id === l.taak), r = D.resources.find((x) => x.id === resId);
   if (!t || !r) return;
   if (t.groep !== r.groep) { toast(`${t.groep}-werk kan niet naar ${r.naam} (${r.groep}).`, 4000); return; }
-  l.resource = resId; l.datum = datum;
-  opvolgersVerschuiven(t.id);
-  controleer(resId, datum);
-  save();
+  if (!voorgangerOk(t, datum)) return;
+  const prev = previewKeten(t.id, [{ id, datum, resource: resId }]);
+  if (!prev.blokken.length && !prev.conflicten.length) {
+    l.resource = resId; l.datum = datum;
+    controleer(resId, datum);
+    save();
+    return;
+  }
+  toonKetenPreview(t, prev, () => {
+    doorvoerenKeten(prev);
+    controleer(resId, datum);
+    save();
+  });
+}
+
+/* Dialoog met het totale gevolg van een wijziging. Niets is opgeslagen tot "Accepteren". */
+function toonKetenPreview(t, prev, bevestig) {
+  const p = D.projecten.find((x) => x.id === t.project);
+  const regels = prev.opvolgers.map((o) => {
+    const extra = o.totaal ? `+${o.totaal} werkdag${o.totaal === 1 ? "" : "en"} (start ${kortDatum(o.nieuweStart)})` : "geen verschuiving";
+    return `<tr><td>${esc(o.taak.omschrijving)}</td><td>${extra}</td></tr>`;
+  }).join("");
+  const proj = prev.projecten.map((x) => `<p class="note">${esc(x.naam)}: einddatum ${x.voor ? kortDatum(x.voor) : "-"} → ${x.na ? kortDatum(x.na) : "-"}</p>`).join("");
+  const conf = prev.conflicten.map((c) => `<p class="note" style="color:#b45309">⚠ ${esc(c.tekst)}</p>`).join("");
+  let ov = document.getElementById("detailModal");
+  if (!ov) { ov = document.createElement("div"); ov.id = "detailModal"; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="dlg" role="dialog" aria-modal="true">
+    <h3>Wijziging: ${esc(p ? p.nr : "")} · ${esc(t.omschrijving)}</h3>
+    ${regels ? `<table class="voor"><thead><tr><th>Taak</th><th>Gevolg</th></tr></thead><tbody>${regels}</tbody></table>` : '<p class="note">Geen opvolgende taken worden geraakt.</p>'}
+    ${proj}
+    <p class="note">${prev.blokken.length} planningblok${prev.blokken.length === 1 ? "" : "ken"} worden gewijzigd.</p>
+    ${conf}
+    <p class="note">Er wordt niets opgeslagen tot je accepteert.</p>
+    <div class="dlg-foot"><span class="sp"></span><button class="btn" id="ketenNee">Annuleren</button><button class="btn primary" id="ketenJa">Accepteren</button></div></div>`;
+  ov.hidden = false;
+  const sluit = () => { ov.hidden = true; ov.innerHTML = ""; };
+  document.getElementById("ketenNee").onclick = sluit;
+  ov.onclick = (e) => { if (e.target === ov) sluit(); };
+  document.getElementById("ketenJa").onclick = () => { sluit(); bevestig(); };
 }
 
 /* Uren van een blok met 1 uur verhogen of verlagen. Het restbudget volgt vanzelf. */
@@ -447,9 +544,19 @@ function wijzigUren(id, delta) {
   if (!l || !t) return;
   if (delta > 0 && restUren(t) <= 0) { toast("Er is geen restbudget meer voor deze taak."); return; }
   if (l.uren + delta < 1) return;
-  l.uren += delta;
-  controleer(l.resource, l.datum);
-  save();
+  const nieuweUren = l.uren + delta;
+  const prev = previewKeten(t.id, [{ id, datum: l.datum, resource: l.resource, uren: nieuweUren }]);
+  if (!prev.blokken.length && !prev.conflicten.length) {
+    l.uren = nieuweUren;
+    controleer(l.resource, l.datum);
+    save();
+    return;
+  }
+  toonKetenPreview(t, prev, () => {
+    doorvoerenKeten(prev);
+    controleer(l.resource, l.datum);
+    save();
+  });
 }
 
 /* Details van een blok in een dialoog. */
@@ -473,7 +580,8 @@ function toonDetail(id) {
       <dt>Totaal gepland</dt><dd>${t.budget - restUren(t)}u</dd>
       <dt>Gerealiseerd</dt><dd>${t.gerealiseerd || 0}u</dd>
       <dt>Nog te plannen</dt><dd>${restUren(t)}u</dd>
-      ${t.voorganger ? `<dt>Voorganger</dt><dd>${esc(omschrijvingVan(t.voorganger))}</dd>` : ""}
+      ${t.voorganger ? `<dt>🔗 Afhankelijk van</dt><dd>${esc(omschrijvingVan(t.voorganger))}</dd>` : ""}
+      ${t.voorganger && datumsVan(t.voorganger).length && l.datum <= datumsVan(t.voorganger).slice(-1)[0] ? `<dt>⚠ Voorganger loopt uit</dt><dd>eerst ${kortDatum(datumsVan(t.voorganger).slice(-1)[0])} af</dd>` : ""}
     </dl>
     <div class="dlg-foot"><span class="sp"></span><button class="btn primary" id="detailSluit">Sluiten</button></div></div>`;
   ov.hidden = false;

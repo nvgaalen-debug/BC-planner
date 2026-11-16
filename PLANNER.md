@@ -40,3 +40,31 @@ Open punten voor de koppeling:
 - Of budget aparte regels zijn of planningsregels met budgetsoort
 - Bron voor verlof en capaciteit
 - Hoe de etag wordt gebruikt bij het schrijven van planningsregels
+
+## Afhankelijkheden (versie 1)
+
+Gebouwd in de planner:
+- Verplaatsen van een planningblok gaat via een preview: eerst berekenen, dan bevestigen (calculate → preview → confirm → save). Er wordt niets opgeslagen tot "Accepteren".
+- Opvolgers schuiven niet blind mee. Per blok wordt de capaciteit op de nieuwe datum gecontroleerd (incl. verlof). Een blok dat niet past blijft staan en krijgt een conflict. Er wordt niet automatisch een andere resource gekozen.
+- Ketens: opvolgers van opvolgers worden herberekend. Circulaire afhankelijkheden worden gedetecteerd in de preview.
+- Deadline van een taak wordt gecontroleerd; overschrijding staat in de preview.
+- Preview toont per taak het aantal werkdagen verschuiving, de projecteinddatum voor en na, en de conflicten.
+- Detailvenster toont "🔗 Afhankelijk van" en "⚠ Voorganger loopt uit" als de voorganger later eindigt.
+
+Nog niet gebouwd:
+- Lag Workdays in de app (veld `lag` wordt al gelezen, maar het komt nog niet uit BC).
+- Dependency type SS, FF, SF.
+- Afhankelijkheden aanmaken of wijzigen in de planner (het moet in BC gebeuren).
+- Wijzigen van uren (± knop) gaat nu via de preview en toont overbezetting. Het verandert de datums niet, dus opvolgers schuiven niet mee. Er is geen aparte resize-functie.
+- Opslaan van de preview als aparte versie.
+
+### BC-datamodel afhankelijkheden (spec)
+
+Tabel in de BC-extensie: Project Task Dependency.
+- Entry No., Project No., Project Task No., Predecessor Task No., Dependency Type (FS, SS, FF, SF; in v1 alleen FS), Lag Workdays, Auto Reschedule.
+- Voorbeeld: P2026-031, taak 2000 Productie, voorganger 1000 Ontwerp, FS, lag 0, auto reschedule ja.
+- Circulaire afhankelijkheden worden in BC geweigerd.
+- Via de BC API per afhankelijkheid: projectNo, projectTaskNo, predecessorTaskNo, dependencyType, lagWorkdays, autoReschedule.
+- De Azure-app onderhoudt geen eigen afhankelijkheden; BC is de bron.
+
+Acceptatietest (uit spec): P2026-031, Ontwerp 16-20 nov (Lisa, 40u), Productie 23-27 nov (Ruud, 40u, voorganger 1000), Montage 30 nov-2 dec (Jeroen, 24u, voorganger 2000). Verschuif Ontwerp van 20 naar 24 november. Verwacht: Productie wordt herberekend, Montage wordt gecontroleerd op capaciteit van Ruud en Jeroen, conflicten zijn zichtbaar, de nieuwe projecteinddatum staat in de preview, en pas na bevestiging wordt opgeslagen.

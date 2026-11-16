@@ -46,3 +46,10 @@ async function init() {
   beheerStatus().then(() => render());
 }
 document.addEventListener("DOMContentLoaded", init);
+
+/* Labels van de Gantt blijven vast staan bij horizontaal scrollen. */
+document.addEventListener("scroll", (ev) => {
+  const w = ev.target;
+  if (!w || !w.classList || !w.classList.contains("grid-wrap")) return;
+  w.querySelectorAll(".g-lbl").forEach((el) => { el.style.transform = "translateX(" + w.scrollLeft + "px)"; });
+}, true);
