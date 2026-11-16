@@ -80,7 +80,7 @@ function status(r, datum) {
 function blokHtml(l) {
   const t = D.taken.find((x) => x.id === l.taak);
   const p = t && D.projecten.find((x) => x.id === t.project);
-  return `<div class="blk" draggable="true" data-drag="plan" data-id="${esc(l.id)}">
+  return `<div class="blk" data-drag="plan" data-id="${esc(l.id)}">
     <span>${esc(p ? p.nr : "")} · ${esc(t ? t.omschrijving : "")}</span>
     <span class="ctl"><button data-act="minu" data-id="${esc(l.id)}" title="1 uur minder">−</button><b>${l.uren}u</b><button data-act="plusu" data-id="${esc(l.id)}" title="1 uur meer">+</button></span>
     <button class="x" data-act="plandel" data-id="${esc(l.id)}" title="Verwijderen">×</button></div>`;
@@ -117,7 +117,7 @@ function viewPlanner() {
       ts.map((t) => {
         const nog = restUren(t); totaalNog += nog;
         const gepl = t.budget - nog, real = t.gerealiseerd || 0;
-        return `<div class="taak" draggable="true" data-drag="taak" data-id="${esc(t.id)}">
+        return `<div class="taak" data-drag="taak" data-id="${esc(t.id)}">
           <span>${esc(t.omschrijving)}</span>
           <small>${esc(t.groep)}</small>
           ${t.voorganger ? `<small class="meta">na: ${esc(omschrijvingVan(t.voorganger))}</small>` : ""}
@@ -313,7 +313,12 @@ function toonDetail(id) {
 }
 
 /* ---------- events ---------- */
+let suppressClick = false;
 document.addEventListener("click", (e) => {
+  if (suppressClick) { suppressClick = false; return; }
+  const kies = e.target.closest("#ctxMenu [data-taak]");
+  if (kies) { hideCtx(); planTaak(kies.dataset.taak, kies.dataset.res, kies.dataset.date); return; }
+  if (!e.target.closest("#ctxMenu")) hideCtx();
   const b = e.target.closest("[data-act='week'], [data-act='plandel'], [data-act='minu'], [data-act='plusu'], [data-act='voorstel']");
   if (b) {
     const a = b.dataset.act;
@@ -360,24 +365,72 @@ function toonVoorstel(taakId) {
   };
 }
 
-let DRAG = null;
+/* Slepen met de muis: werkt zonder de native drag van de browser. */
+let PD = null;
+const cellAt = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest("[data-drop]"); };
 const clearHL = () => document.querySelectorAll(".cel.dropov").forEach((c) => c.classList.remove("dropov"));
-document.addEventListener("dragstart", (e) => {
-  const el = e.target.closest("[data-drag]"); if (!el) return;
-  DRAG = { type: el.dataset.drag, id: el.dataset.id };
-  e.dataTransfer.effectAllowed = "move";
-  e.dataTransfer.setData("text/plain", el.dataset.id || "");
+
+document.addEventListener("pointerdown", (e) => {
+  suppressClick = false;
+  if (e.button !== 0 || e.target.closest("button")) return;
+  const el = e.target.closest("[data-drag]");
+  if (!el) return;
+  PD = { type: el.dataset.drag, id: el.dataset.id, x: e.clientX, y: e.clientY, moved: false, label: el.textContent.trim().replace(/\s+/g, " ").slice(0, 60) };
 });
-document.addEventListener("dragover", (e) => {
-  const c = e.target.closest("[data-drop]"); if (!c || !DRAG) return;
-  e.preventDefault(); e.dataTransfer.dropEffect = "move";
-  if (!c.classList.contains("dropov")) { clearHL(); c.classList.add("dropov"); }
+document.addEventListener("pointermove", (e) => {
+  if (!PD) return;
+  if (!PD.moved) {
+    if (Math.hypot(e.clientX - PD.x, e.clientY - PD.y) < 6) return;
+    PD.moved = true;
+    PD.ghost = document.createElement("div");
+    PD.ghost.className = "ghost";
+    PD.ghost.textContent = PD.label;
+    document.body.appendChild(PD.ghost);
+    document.body.classList.add("sleep");
+  }
+  PD.ghost.style.left = e.clientX + 14 + "px";
+  PD.ghost.style.top = e.clientY + 14 + "px";
+  clearHL();
+  const c = cellAt(e.clientX, e.clientY);
+  if (c) c.classList.add("dropov");
 });
-document.addEventListener("drop", (e) => {
-  const c = e.target.closest("[data-drop]"); if (!c || !DRAG) return;
-  e.preventDefault();
-  const d = DRAG; DRAG = null; clearHL();
+document.addEventListener("pointerup", (e) => {
+  if (!PD) return;
+  const d = PD; PD = null;
+  if (d.ghost) d.ghost.remove();
+  document.body.classList.remove("sleep");
+  clearHL();
+  if (!d.moved) return;
+  suppressClick = true;
+  const c = cellAt(e.clientX, e.clientY);
+  if (!c) return;
   if (d.type === "taak") planTaak(d.id, c.dataset.res, c.dataset.date);
   else verplaatsPlan(d.id, c.dataset.res, c.dataset.date);
 });
-document.addEventListener("dragend", () => { DRAG = null; clearHL(); });
+
+/* Rechtermuisknop op een cel: kies een ongeplande taak voor deze resource en dag. */
+function hideCtx() { const m = document.getElementById("ctxMenu"); if (m) m.remove(); }
+function toonCtx(x, y, resId, datum) {
+  hideCtx();
+  const r = D.resources.find((q) => q.id === resId);
+  if (!r) return;
+  const opties = D.taken.filter((t) => t.groep === r.groep && restUren(t) > 0);
+  const p = (id) => (D.projecten.find((q) => q.id === id) || {}).nr || "";
+  const items = opties.length
+    ? opties.map((t) => `<button data-taak="${esc(t.id)}" data-res="${esc(resId)}" data-date="${datum}">${esc(p(t.project))} · ${esc(t.omschrijving)}<small>nog ${restUren(t)}u${t.voorganger ? " · na " + esc(omschrijvingVan(t.voorganger)) : ""}</small></button>`).join("")
+    : '<p class="note" style="padding:8px 10px">Geen ongeplande taken voor deze groep.</p>';
+  const m = document.createElement("div");
+  m.id = "ctxMenu";
+  m.innerHTML = `<div class="kop">Inplannen op ${kortDatum(datum)} · ${esc(r.naam)}</div>${items}`;
+  document.body.appendChild(m);
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.min(x, window.innerWidth - w - 8) + "px";
+  m.style.top = Math.min(y, window.innerHeight - h - 8) + "px";
+}
+document.addEventListener("contextmenu", (e) => {
+  const c = e.target.closest("[data-drop]");
+  if (!c) { hideCtx(); return; }
+  e.preventDefault();
+  toonCtx(e.clientX, e.clientY, c.dataset.res, c.dataset.date);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCtx(); });

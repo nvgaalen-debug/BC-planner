@@ -168,3 +168,11 @@ table.voor th,table.voor td{text-align:left;padding:8px 6px;border-bottom:1px so
 table.voor th{color:var(--muted);font-weight:550;font-size:12.5px}
 table.voor td:last-child{text-align:right}
 .taak .btn.sm{margin-top:4px;justify-self:start}
+
+.ghost{position:fixed;z-index:95;pointer-events:none;background:var(--accent);color:var(--on-accent);padding:6px 10px;border-radius:8px;font-size:12px;font-weight:550;box-shadow:var(--shadow-lg);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.sleep{cursor:grabbing;user-select:none}
+#ctxMenu{position:fixed;z-index:96;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-lg);padding:6px;min-width:280px;max-height:50vh;overflow:auto}
+#ctxMenu .kop{padding:6px 10px 8px;font-size:12px;font-weight:600;color:var(--muted)}
+#ctxMenu button{display:block;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:var(--r-sm);cursor:pointer;font-size:13.5px}
+#ctxMenu button:hover{background:var(--sunk)}
+#ctxMenu button small{display:block;color:var(--muted);font-size:11.5px}
