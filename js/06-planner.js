@@ -11,7 +11,7 @@ const addDays = (s, n) => { const d = pYmd(s); d.setDate(d.getDate() + n); retur
 function maandag(s) { const d = s ? pYmd(s) : new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); }
 const kortDatum = (s) => pYmd(s).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 
-const DEMO_VERSIE = 2;
+const DEMO_VERSIE = 4;
 
 function demo(mon) {
   const d = (n) => addDays(mon, n);
@@ -32,12 +32,12 @@ function demo(mon) {
       { id: "p3", nr: "P2026-037", naam: "Serre Apeldoorn" },
     ],
     taken: [
-      { id: "t1", project: "p1", groep: "Ontwerp", omschrijving: "Opname en tekeningen", budget: 16 },
-      { id: "t2", project: "p1", groep: "Productie", omschrijving: "Kozijnen en deuren fabriceren", budget: 48 },
-      { id: "t3", project: "p1", groep: "Montage", omschrijving: "Montage op bouwplaats", budget: 24 },
+      { id: "t1", project: "p1", groep: "Ontwerp", omschrijving: "Opname en tekeningen", budget: 16, gerealiseerd: 4 },
+      { id: "t2", project: "p1", groep: "Productie", omschrijving: "Kozijnen en deuren fabriceren", budget: 48, gerealiseerd: 0 },
+      { id: "t3", project: "p1", groep: "Montage", omschrijving: "Montage op bouwplaats", budget: 24, voorganger: "t2", deadline: d(4) },
       { id: "t4", project: "p2", groep: "Ontwerp", omschrijving: "Vliesgevel ontwerp", budget: 40 },
-      { id: "t5", project: "p2", groep: "Productie", omschrijving: "Vliesgevel fabriceren", budget: 80 },
-      { id: "t6", project: "p3", groep: "Montage", omschrijving: "Serre plaatsen en afdichten", budget: 24 },
+      { id: "t5", project: "p2", groep: "Productie", omschrijving: "Vliesgevel fabriceren", budget: 80, voorganger: "t4" },
+      { id: "t6", project: "p3", groep: "Montage", omschrijving: "Serre plaatsen en afdichten", budget: 24, voorganger: "t7" },
       { id: "t7", project: "p3", groep: "Ontwerp", omschrijving: "Serre ontwerp", budget: 12 },
     ],
     planning: [
@@ -81,7 +81,8 @@ function blokHtml(l) {
   const t = D.taken.find((x) => x.id === l.taak);
   const p = t && D.projecten.find((x) => x.id === t.project);
   return `<div class="blk" draggable="true" data-drag="plan" data-id="${esc(l.id)}">
-    <span>${esc(p ? p.nr : "")} · ${esc(t ? t.omschrijving : "")}</span><b>${l.uren}u</b>
+    <span>${esc(p ? p.nr : "")} · ${esc(t ? t.omschrijving : "")}</span>
+    <span class="ctl"><button data-act="minu" data-id="${esc(l.id)}" title="1 uur minder">−</button><b>${l.uren}u</b><button data-act="plusu" data-id="${esc(l.id)}" title="1 uur meer">+</button></span>
     <button class="x" data-act="plandel" data-id="${esc(l.id)}" title="Verwijderen">×</button></div>`;
 }
 
@@ -115,10 +116,14 @@ function viewPlanner() {
     ongepland += `<div class="pj"><b>${esc(p.nr)}</b> <span>${esc(p.naam)}</span>` +
       ts.map((t) => {
         const nog = restUren(t); totaalNog += nog;
+        const gepl = t.budget - nog, real = t.gerealiseerd || 0;
         return `<div class="taak" draggable="true" data-drag="taak" data-id="${esc(t.id)}">
-          <span>${esc(t.omschrijving)} <small>${esc(t.groep)}</small></span>
-          <span class="nu">nog ${nog}u</span>
-          <small class="meta">budget ${t.budget}u · gepland ${t.budget - nog}u</small></div>`;
+          <span>${esc(t.omschrijving)}</span>
+          <small>${esc(t.groep)}</small>
+          ${t.voorganger ? `<small class="meta">na: ${esc(omschrijvingVan(t.voorganger))}</small>` : ""}
+          <span class="nu">${nog}u nog te plannen</span>
+          <button class="btn sm" data-act="voorstel" data-id="${esc(t.id)}">Voorstel</button>
+          <small class="meta">${t.budget}u budget · ${gepl}u gepland · ${real}u gerealiseerd</small></div>`;
       }).join("") + `</div>`;
   }
   if (!ongepland) ongepland = '<p class="note">Alle taken zijn volledig ingepland.</p>';
@@ -174,38 +179,186 @@ function viewTab() {
 }
 
 /* ---------- acties ---------- */
+/* Capaciteitscontrole na elke wijziging: over- en niet-beschikbaar melden. */
+function controleer(resId, datum) {
+  const r = D.resources.find((x) => x.id === resId);
+  if (!r) return;
+  const st = status(r, datum);
+  if (st === "over") toast(`${r.naam} is overgepland op ${kortDatum(datum)}: ${plannedFor(resId, datum)}u van ${capFor(resId, datum)}u.`, 5000);
+  else if (st === "na") toast(`${r.naam} is niet beschikbaar op ${kortDatum(datum)}.`, 4000);
+}
+
+/* Afhankelijkheden: werkdagen en datums van een taak */
+const isWerkdag = (s) => { const w = pYmd(s).getDay(); return w !== 0 && w !== 6; };
+function werkdag(s, n) { let d = s, k = 0; while (k < n) { d = addDays(d, 1); if (isWerkdag(d)) k++; } return d; }
+function werkdagenTussen(a, b) { let n = 0, d = a; while (d < b) { d = addDays(d, 1); if (isWerkdag(d)) n++; } return n; }
+const datumsVan = (taakId) => D.planning.filter((l) => l.taak === taakId).map((l) => l.datum).sort();
+const omschrijvingVan = (taakId) => (D.taken.find((x) => x.id === taakId) || {}).omschrijving || "";
+
+/* Een blok van de opvolger mag niet vóór het einde van de voorganger beginnen. */
+function voorgangerOk(t, datum) {
+  if (!t.voorganger) return true;
+  const vd = datumsVan(t.voorganger);
+  if (!vd.length) return true;
+  if (datum <= vd[vd.length - 1]) { toast(`Plan na ${kortDatum(vd[vd.length - 1])}: eerst ${omschrijvingVan(t.voorganger)} af.`, 5000); return false; }
+  return true;
+}
+
+/* Na het verschuiven van een voorganger: opvolgers die te vroeg beginnen schuiven mee. */
+function opvolgersVerschuiven(taakId) {
+  const eind = datumsVan(taakId).slice(-1)[0];
+  if (!eind) return;
+  for (const b of D.taken.filter((x) => x.voorganger === taakId)) {
+    const bd = datumsVan(b.id);
+    if (!bd.length || bd[0] > eind) continue;
+    const doel = werkdag(eind, 1);
+    const k = werkdagenTussen(bd[0], doel);
+    for (const l of D.planning.filter((x) => x.taak === b.id)) l.datum = werkdag(l.datum, k);
+    toast(`${b.omschrijving} is ${k} werkdag(en) later gezet.`, 4000);
+    opvolgersVerschuiven(b.id);
+  }
+}
+
+/* Voorstel: verdeel het restbudget over de resources van de groep, op vrije capaciteit per dag. */
+function voorstel(taakId) {
+  const t = D.taken.find((x) => x.id === taakId);
+  if (!t) return null;
+  const mon = S.week || maandag();
+  let start = mon;
+  const vd = datumsVan(t.voorganger);
+  if (vd.length) { const na = werkdag(vd[vd.length - 1], 1); if (na > start) start = na; }
+  const dagen = [];
+  for (let i = 0; i < 14; i++) { const d = addDays(start, i); if (isWerkdag(d) && (!t.deadline || d <= t.deadline)) dagen.push(d); }
+  const kandidaten = D.resources.filter((r) => r.groep === t.groep);
+  const regels = [];
+  let rest = restUren(t);
+  for (const d of dagen) for (const r of kandidaten) {
+    if (rest <= 0) break;
+    const reeds = regels.filter((x) => x.resource === r.id && x.datum === d).reduce((a, x) => a + x.uren, 0);
+    const vrij = capFor(r.id, d) - plannedFor(r.id, d) - reeds;
+    if (vrij <= 0) continue;
+    const uren = Math.min(rest, vrij);
+    regels.push({ taak: t.id, resource: r.id, datum: d, uren });
+    rest -= uren;
+  }
+  return { t, regels, restNa: rest };
+}
+
 function planTaak(taakId, resId, datum) {
   const t = D.taken.find((x) => x.id === taakId), r = D.resources.find((x) => x.id === resId);
   if (!t || !r) return;
+  if (t.groep !== r.groep) { toast(`${t.groep}-werk kan niet naar ${r.naam} (${r.groep}).`, 4000); return; }
+  if (!voorgangerOk(t, datum)) return;
   const rest = restUren(t);
   if (rest <= 0) { toast("Deze taak is al volledig ingepland."); return; }
   const vrij = capFor(r.id, datum) - plannedFor(r.id, datum);
   const uren = Math.min(rest, vrij > 0 ? vrij : r.uren);
   D.planning.push({ id: uid(), taak: t.id, resource: r.id, datum, uren });
-  if (t.groep !== r.groep) toast(`${r.naam} zit in ${r.groep}; de taak is ${t.groep}. Toch ingepland.`, 5000);
-  else if (plannedFor(r.id, datum) > capFor(r.id, datum)) toast(`${r.naam} is overgepland op ${kortDatum(datum)}.`, 5000);
+  controleer(r.id, datum);
   save();
 }
+
 function verplaatsPlan(id, resId, datum) {
   const l = D.planning.find((x) => x.id === id);
   if (!l || (l.resource === resId && l.datum === datum)) return;
+  const t = D.taken.find((x) => x.id === l.taak), r = D.resources.find((x) => x.id === resId);
+  if (!t || !r) return;
+  if (t.groep !== r.groep) { toast(`${t.groep}-werk kan niet naar ${r.naam} (${r.groep}).`, 4000); return; }
   l.resource = resId; l.datum = datum;
-  if (plannedFor(resId, datum) > capFor(resId, datum)) toast("Let op: deze resource is overgepland op die dag.", 4000);
+  opvolgersVerschuiven(t.id);
+  controleer(resId, datum);
   save();
+}
+
+/* Uren van een blok met 1 uur verhogen of verlagen. Het restbudget volgt vanzelf. */
+function wijzigUren(id, delta) {
+  const l = D.planning.find((x) => x.id === id);
+  const t = l && D.taken.find((x) => x.id === l.taak);
+  if (!l || !t) return;
+  if (delta > 0 && restUren(t) <= 0) { toast("Er is geen restbudget meer voor deze taak."); return; }
+  if (l.uren + delta < 1) return;
+  l.uren += delta;
+  controleer(l.resource, l.datum);
+  save();
+}
+
+/* Details van een blok in een dialoog. */
+function toonDetail(id) {
+  const l = D.planning.find((x) => x.id === id);
+  const t = l && D.taken.find((x) => x.id === l.taak);
+  if (!l || !t) return;
+  const p = D.projecten.find((x) => x.id === t.project);
+  const r = D.resources.find((x) => x.id === l.resource);
+  let ov = document.getElementById("detailModal");
+  if (!ov) { ov = document.createElement("div"); ov.id = "detailModal"; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="detT">
+    <h3 id="detT">${esc(p ? p.nr : "")} · ${esc(t.omschrijving)}</h3>
+    <p class="note">${esc(p ? p.naam : "")}</p>
+    <dl class="kv">
+      <dt>Groep</dt><dd>${esc(t.groep)}</dd>
+      <dt>Resource</dt><dd>${esc(r ? r.naam : "")}</dd>
+      <dt>Datum</dt><dd>${kortDatum(l.datum)}</dd>
+      <dt>Gepland op dit blok</dt><dd>${l.uren}u</dd>
+      <dt>Projectbudget</dt><dd>${t.budget}u</dd>
+      <dt>Totaal gepland</dt><dd>${t.budget - restUren(t)}u</dd>
+      <dt>Gerealiseerd</dt><dd>${t.gerealiseerd || 0}u</dd>
+      <dt>Nog te plannen</dt><dd>${restUren(t)}u</dd>
+      ${t.voorganger ? `<dt>Voorganger</dt><dd>${esc(omschrijvingVan(t.voorganger))}</dd>` : ""}
+    </dl>
+    <div class="dlg-foot"><span class="sp"></span><button class="btn primary" id="detailSluit">Sluiten</button></div></div>`;
+  ov.hidden = false;
+  const sluit = () => { ov.hidden = true; ov.innerHTML = ""; };
+  document.getElementById("detailSluit").onclick = sluit;
+  ov.onclick = (e) => { if (e.target === ov) sluit(); };
 }
 
 /* ---------- events ---------- */
 document.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-act='week'], [data-act='plandel']");
-  if (!b) return;
-  if (b.dataset.act === "week") {
-    const n = Number(b.dataset.d);
-    S.week = n ? addDays(S.week || maandag(), n) : maandag();
-    render(); return;
+  const b = e.target.closest("[data-act='week'], [data-act='plandel'], [data-act='minu'], [data-act='plusu'], [data-act='voorstel']");
+  if (b) {
+    const a = b.dataset.act;
+    if (a === "week") {
+      const n = Number(b.dataset.d);
+      S.week = n ? addDays(S.week || maandag(), n) : maandag();
+      render(); return;
+    }
+    if (a === "voorstel") { toonVoorstel(b.dataset.id); return; }
+    if (a === "minu") { wijzigUren(b.dataset.id, -1); return; }
+    if (a === "plusu") { wijzigUren(b.dataset.id, 1); return; }
+    D.planning = D.planning.filter((x) => x.id !== b.dataset.id);
+    save(); return;
   }
-  D.planning = D.planning.filter((x) => x.id !== b.dataset.id);
-  save();
+  const blk = e.target.closest(".blk");
+  if (blk) toonDetail(blk.dataset.id);
 });
+
+function toonVoorstel(taakId) {
+  const v = voorstel(taakId);
+  if (!v) return;
+  const t = v.t;
+  const regels = v.regels;
+  const rijen = regels.length
+    ? regels.map((x) => { const r = D.resources.find((y) => y.id === x.resource); return `<tr><td>${kortDatum(x.datum)}</td><td>${esc(r ? r.naam : "")}</td><td>${x.uren}u</td></tr>`; }).join("")
+    : '<tr><td colspan="3">Geen vrije capaciteit in deze periode.</td></tr>';
+  let ov = document.getElementById("detailModal");
+  if (!ov) { ov = document.createElement("div"); ov.id = "detailModal"; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="dlg" role="dialog" aria-modal="true">
+    <h3>Voorstel: ${esc(t.omschrijving)}</h3>
+    <p class="note">${esc(t.groep)} · ${restUren(t)}u nog te plannen${t.deadline ? ` · deadline ${kortDatum(t.deadline)}` : ""}${t.voorganger ? ` · na ${esc(omschrijvingVan(t.voorganger))}` : ""}</p>
+    <table class="voor"><thead><tr><th>Datum</th><th>Resource</th><th>Uren</th></tr></thead><tbody>${rijen}</tbody></table>
+    <p class="note">${v.restNa > 0 ? `Er blijft ${v.restNa}u over zonder plek.` : "Het hele restbudget past in dit voorstel."}</p>
+    <div class="dlg-foot"><span class="sp"></span><button class="btn" id="voorNee">Annuleren</button><button class="btn primary" id="voorJa" ${regels.length ? "" : "disabled"}>Accepteren</button></div></div>`;
+  ov.hidden = false;
+  const sluit = () => { ov.hidden = true; ov.innerHTML = ""; };
+  document.getElementById("voorNee").onclick = sluit;
+  ov.onclick = (e) => { if (e.target === ov) sluit(); };
+  document.getElementById("voorJa").onclick = () => {
+    for (const x of regels) D.planning.push({ id: uid(), taak: x.taak, resource: x.resource, datum: x.datum, uren: x.uren });
+    sluit();
+    controleer(regels[0].resource, regels[0].datum);
+    save();
+  };
+}
 
 let DRAG = null;
 const clearHL = () => document.querySelectorAll(".cel.dropov").forEach((c) => c.classList.remove("dropov"));

@@ -19,3 +19,24 @@ Wat we bewust niet doen in de MVP: projectmatige Gantt, afhankelijkheden tussen 
 2. Wegschrijven van planningsregels naar BC; conflicten met de BC-etag afvangen
 3. Capaciteitsweergave van 8-12 weken
 4. Fase 2: automatisch voorstel plannen (groep, beschikbaarheid, max uren per dag, deadline, skills)
+
+## Datamodel: BC als basis
+Principe: BC blijft de bron voor projecten, taken, resources en planning. De planner voegt alleen de visuele dagplanning toe.
+
+| Planner-begrip | BC-object | Opmerking |
+|---|---|---|
+| Project | Job | Nummer en naam |
+| Taak | Job Task | Groep (Ontwerp, Productie, Montage) als eigen veld of via resourcegroep |
+| Resource | Resource | Resource Group voor de groep |
+| Geplande uren per dag | Job Planning Line | Datum, resource en aantal; schrijven via de API |
+| Gerealiseerd | Job Ledger Entry | Alleen lezen, optellen per taak |
+| Budget | Budgetregels van de taak | Nog te controleren: aparte regels of Job Planning Lines met budgetsoort |
+| Afhankelijkheid (voorganger) | Extensie | BC kent geen predecessor/successor voor projecttaken |
+| Deadline per taak | Extensie | Instelling van de planner |
+| Verlof / capaciteit | BC-resourcekalender, of extensie | Nog te controleren in de BC-versie |
+
+Open punten voor de koppeling:
+- Welke BC-versie en of het SaaS is (bevestigd: SaaS)
+- Of budget aparte regels zijn of planningsregels met budgetsoort
+- Bron voor verlof en capaciteit
+- Hoe de etag wordt gebruikt bij het schrijven van planningsregels

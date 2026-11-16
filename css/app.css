@@ -103,8 +103,8 @@ h2{font:650 18px/1.25 var(--f-disp);letter-spacing:-.015em;margin:0}
 
 /* Dialogen en melding */
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13.5px;font-weight:500;z-index:90;box-shadow:var(--shadow-lg)}
-#pwModal,#bpwModal{position:fixed;inset:0;z-index:80;background:rgba(6,14,18,.45);backdrop-filter:blur(3px);display:grid;place-items:center;padding:16px}
-#pwModal[hidden],#bpwModal[hidden]{display:none}
+#pwModal,#bpwModal,#detailModal{position:fixed;inset:0;z-index:80;background:rgba(6,14,18,.45);backdrop-filter:blur(3px);display:grid;place-items:center;padding:16px}
+#pwModal[hidden],#bpwModal[hidden],#detailModal[hidden]{display:none}
 .dlg{background:var(--surface);border-radius:var(--r-lg);border:1px solid var(--line);width:min(440px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:22px;box-shadow:var(--shadow-lg)}
 .dlg h3{font:650 18px/1.25 var(--f-disp);margin:0 0 6px}
 .dlg-foot{display:flex;gap:8px;align-items:center;margin-top:18px;flex-wrap:wrap}
@@ -154,3 +154,17 @@ td.cel.dropov{box-shadow:inset 0 0 0 2px var(--accent)}
 .lg-vol{background:var(--cel-vol)}
 .lg-over{background:var(--cel-over)}
 .lg-na{background:repeating-linear-gradient(135deg,var(--sunk) 0 6px,var(--surface) 6px 12px)}
+
+.blk .ctl{display:inline-flex;align-items:center;gap:2px;flex:none}
+.blk .ctl button{background:rgba(255,255,255,.18);border:0;color:inherit;border-radius:4px;width:17px;height:17px;line-height:1;cursor:pointer;padding:0;font-size:12px}
+.blk .ctl button:hover{background:rgba(255,255,255,.32)}
+.blk .ctl b{min-width:24px;text-align:center;font-weight:650}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin:14px 0 0}
+.kv dt{color:var(--muted);font-size:13px}
+.kv dd{margin:0;font-weight:550;text-align:right}
+
+table.voor{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}
+table.voor th,table.voor td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+table.voor th{color:var(--muted);font-weight:550;font-size:12.5px}
+table.voor td:last-child{text-align:right}
+.taak .btn.sm{margin-top:4px;justify-self:start}
