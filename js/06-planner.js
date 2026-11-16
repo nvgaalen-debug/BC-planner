@@ -11,50 +11,61 @@ const addDays = (s, n) => { const d = pYmd(s); d.setDate(d.getDate() + n); retur
 function maandag(s) { const d = s ? pYmd(s) : new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); }
 const kortDatum = (s) => pYmd(s).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 
+const DEMO_VERSIE = 2;
+
 function demo(mon) {
   const d = (n) => addDays(mon, n);
   return {
+    versie: DEMO_VERSIE,
     settings: { titel: "BC Resource Planner" },
-    groepen: ["Development", "Consultancy", "PM"],
+    groepen: ["Ontwerp", "Productie", "Montage"],
     resources: [
-      { id: "r1", naam: "Jeroen", groep: "Consultancy", uren: 8 },
-      { id: "r2", naam: "Marcel", groep: "Development", uren: 8 },
-      { id: "r3", naam: "Niels", groep: "PM", uren: 8 },
-      { id: "r4", naam: "Sanne", groep: "Development", uren: 8 },
+      { id: "r1", naam: "Lisa", groep: "Ontwerp", uren: 8 },
+      { id: "r2", naam: "Ruud", groep: "Productie", uren: 8 },
+      { id: "r3", naam: "Jeroen", groep: "Montage", uren: 8 },
+      { id: "r4", naam: "Marcel", groep: "Montage", uren: 8 },
+      { id: "r5", naam: "Sanne", groep: "Productie", uren: 8 },
     ],
     projecten: [
-      { id: "p1", nr: "P2026-014", naam: "Implementatie klant X" },
-      { id: "p2", nr: "P2026-018", naam: "Herontwerp klant A" },
-      { id: "p3", nr: "P2026-021", naam: "Testen klant B" },
+      { id: "p1", nr: "P2026-031", naam: "Woningbouw Hoogkerk: kozijnen en deuren" },
+      { id: "p2", nr: "P2026-034", naam: "Kantoor Zwolle: vliesgevel" },
+      { id: "p3", nr: "P2026-037", naam: "Serre Apeldoorn" },
     ],
     taken: [
-      { id: "t1", project: "p1", groep: "Consultancy", omschrijving: "Configuratie", budget: 80 },
-      { id: "t2", project: "p1", groep: "Development", omschrijving: "Development", budget: 24 },
-      { id: "t3", project: "p2", groep: "Development", omschrijving: "Development", budget: 40 },
-      { id: "t4", project: "p3", groep: "Development", omschrijving: "Testen", budget: 16 },
-      { id: "t5", project: "p3", groep: "PM", omschrijving: "Projectleiding", budget: 12 },
+      { id: "t1", project: "p1", groep: "Ontwerp", omschrijving: "Opname en tekeningen", budget: 16 },
+      { id: "t2", project: "p1", groep: "Productie", omschrijving: "Kozijnen en deuren fabriceren", budget: 48 },
+      { id: "t3", project: "p1", groep: "Montage", omschrijving: "Montage op bouwplaats", budget: 24 },
+      { id: "t4", project: "p2", groep: "Ontwerp", omschrijving: "Vliesgevel ontwerp", budget: 40 },
+      { id: "t5", project: "p2", groep: "Productie", omschrijving: "Vliesgevel fabriceren", budget: 80 },
+      { id: "t6", project: "p3", groep: "Montage", omschrijving: "Serre plaatsen en afdichten", budget: 24 },
+      { id: "t7", project: "p3", groep: "Ontwerp", omschrijving: "Serre ontwerp", budget: 12 },
     ],
     planning: [
-      { id: "l1", taak: "t1", resource: "r1", datum: d(0), uren: 8 },
-      { id: "l2", taak: "t1", resource: "r1", datum: d(1), uren: 8 },
-      { id: "l3", taak: "t3", resource: "r2", datum: d(0), uren: 8 },
-      { id: "l4", taak: "t3", resource: "r2", datum: d(1), uren: 8 },
-      { id: "l5", taak: "t3", resource: "r2", datum: d(2), uren: 8 },
-      { id: "l8", taak: "t4", resource: "r2", datum: d(2), uren: 4 },
-      { id: "l6", taak: "t5", resource: "r3", datum: d(0), uren: 4 },
-      { id: "l7", taak: "t5", resource: "r3", datum: d(2), uren: 6 },
+      { id: "l1", taak: "t1", resource: "r1", datum: d(0), uren: 6 },
+      { id: "l2", taak: "t1", resource: "r1", datum: d(1), uren: 6 },
+      { id: "l3", taak: "t2", resource: "r2", datum: d(0), uren: 8 },
+      { id: "l4", taak: "t2", resource: "r2", datum: d(1), uren: 8 },
+      { id: "l5", taak: "t2", resource: "r5", datum: d(2), uren: 8 },
+      { id: "l6", taak: "t3", resource: "r3", datum: d(3), uren: 8 },
+      { id: "l7", taak: "t4", resource: "r1", datum: d(2), uren: 8 },
+      { id: "l8", taak: "t4", resource: "r1", datum: d(3), uren: 4 },
+      { id: "l9", taak: "t5", resource: "r5", datum: d(4), uren: 4 },
+      { id: "l10", taak: "t6", resource: "r4", datum: d(4), uren: 8 },
     ],
-    verlof: [{ id: "v1", resource: "r4", datum: d(3), uren: 8 }],
+    verlof: [{ id: "v1", resource: "r3", datum: d(2), uren: 8 }],
   };
 }
 
-/* Eerste keer (geen data op de server): nepdata. Zodra /api/state data heeft, vervangt initSync dit. */
-if (!D.resources) Object.assign(D, demo(maandag()));
+/* Demodata zetten als de data op de server ontbreekt of van een oudere versie is. */
+function ensureData() {
+  if (D.versie !== DEMO_VERSIE) { Object.assign(D, demo(maandag())); pushState(); }
+}
+ensureData();
 
 /* ---------- rekenregels ---------- */
 const plannedFor = (res, datum) => D.planning.filter((l) => l.resource === res && l.datum === datum).reduce((a, l) => a + l.uren, 0);
 const verlofFor = (res, datum) => D.verlof.filter((v) => v.resource === res && v.datum === datum).reduce((a, v) => a + v.uren, 0);
-const capFor = (r, datum) => Math.max(0, r.uren - verlofFor(r.id, datum));
+const capFor = (resId, datum) => { const r = D.resources.find((x) => x.id === resId); return r ? Math.max(0, r.uren - verlofFor(resId, datum)) : 0; };
 const restUren = (t) => t.budget - D.planning.filter((l) => l.taak === t.id).reduce((a, l) => a + l.uren, 0);
 function status(r, datum) {
   const cap = capFor(r.id, datum), gep = plannedFor(r.id, datum);
@@ -75,6 +86,7 @@ function blokHtml(l) {
 }
 
 function viewPlanner() {
+  ensureData();
   const mon = S.week || maandag();
   const dagen = DAGEN.map((_, i) => addDays(mon, i));
   const kop = dagen.map((d, i) => `<th>${DAGEN[i]} ${kortDatum(d)}</th>`).join("");
