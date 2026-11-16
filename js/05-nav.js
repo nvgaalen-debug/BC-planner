@@ -1,13 +1,14 @@
 /* ---------- navigatie: tabs plus "meer"-dropdowns, met Beheer-afscherming ---------- */
 const MENU_ITEMS = {
   "tab:overzicht": ["Planning", ""],
+  "tab:gantt": ["Gantt", "Planning over tijd per resource of project"],
   "tab:instellingen": ["Instellingen", ""],
   "act:beheerlock": ["Beheer vergrendelen", "Verberg het Beheer-menu weer tot het wachtwoord opnieuw is ingevuld"],
   "act:logout": ["Uitloggen", "Vergeet het wachtwoord op dit tabblad"],
 };
 function menuCfg() {
   return {
-    top: ["tab:overzicht", "g:beheer"],
+    top: ["tab:overzicht", "tab:gantt", "g:beheer"],
     groups: { beheer: { l: "Beheer", items: ["tab:instellingen", "act:beheerlock", "act:logout"] } },
   };
 }

@@ -175,7 +175,103 @@ function viewInstellingen() {
 
 function viewTab() {
   if (S.tab === "instellingen") return viewInstellingen();
+  if (S.tab === "gantt") return viewGantt();
   return viewPlanner();
+}
+
+/* ---------- Gantt: resource-weergave en project-weergave over vier weken ---------- */
+const GW = 44, GLABEL = 220, GDAGEN = 28, GROWH = 30, GLANE = 24;
+const DAGNAAM = ["zo", "ma", "di", "wo", "do", "vr", "za"];
+function viewGantt() {
+  ensureData();
+  const mon = S.week || maandag();
+  const dagen = Array.from({ length: GDAGEN }, (_, i) => addDays(mon, i));
+  const xVan = (d) => GLABEL + dagen.indexOf(d) * GW;
+  const breedte = GLABEL + GDAGEN * GW;
+  const modus = S.gmode || "res";
+  let hoogte = 0, inhoud = "", svg = "";
+
+  const kopHtml = dagen.map((d, i) => {
+    const wd = pYmd(d).getDay();
+    return `<div class="g-day${wd === 0 || wd === 6 ? " we" : ""}" style="left:${GLABEL + i * GW}px;width:${GW}px">${DAGNAAM[wd]} ${pYmd(d).getDate()}</div>`;
+  }).join("");
+
+  if (modus === "res") {
+    for (const g of D.groepen) {
+      inhoud += `<div class="g-grp" style="top:${hoogte}px;width:${breedte}px">${esc(g)}</div>`; hoogte += 26;
+      for (const r of D.resources.filter((x) => x.groep === g)) {
+        const lijnen = D.planning.filter((l) => l.resource === r.id && dagen.includes(l.datum)).sort((a, b) => (a.datum < b.datum ? -1 : 1));
+        const per = {};
+        let lanes = 1;
+        const balken = lijnen.map((l) => {
+          const k = per[l.datum] || 0; per[l.datum] = k + 1; lanes = Math.max(lanes, k + 1);
+          const t = D.taken.find((x) => x.id === l.taak), pr = t && D.projecten.find((x) => x.id === t.project);
+          return `<div class="gbar" data-id="${esc(l.id)}" title="${esc(pr ? pr.nr : "")} · ${esc(t ? t.omschrijving : "")} · ${l.uren}u" style="left:${xVan(l.datum) + 2}px;top:${hoogte + 4 + k * GLANE}px;width:${GW - 4}px">${l.uren}u</div>`;
+        }).join("");
+        const h = lanes * GLANE + 8;
+        inhoud += `<div class="g-lbl" style="top:${hoogte}px;height:${h}px">${esc(r.naam)}<small>${r.uren}u/dag</small></div>` +
+          `<div class="g-lane" style="top:${hoogte}px;height:${h}px;left:${GLABEL}px;width:${GDAGEN * GW}px"></div>${balken}`;
+        hoogte += h;
+      }
+    }
+  } else {
+    const pijlen = [];
+    const taakY = {};
+    for (const pr of D.projecten) {
+      inhoud += `<div class="g-grp" style="top:${hoogte}px;width:${breedte}px"><b>${esc(pr.nr)}</b> ${esc(pr.naam)}</div>`; hoogte += 26;
+      for (const t of D.taken.filter((x) => x.project === pr.id)) {
+        const y = hoogte;
+        taakY[t.id] = y;
+        const lijnen = D.planning.filter((l) => l.taak === t.id).map((l) => l.datum).sort();
+        inhoud += `<div class="g-lbl g-task-lbl" style="top:${y}px;height:${GROWH}px">${esc(t.omschrijving)} <small>${esc(t.groep)}</small></div>`;
+        if (lijnen.length) {
+          const a = lijnen[0], b = lijnen[lijnen.length - 1];
+          const x1 = xVan(a < dagen[0] ? dagen[0] : a) ?? GLABEL;
+          const eindIdx = dagen.indexOf(b > dagen[dagen.length - 1] ? dagen[dagen.length - 1] : b);
+          const x2 = eindIdx >= 0 ? GLABEL + (eindIdx + 1) * GW - 4 : null;
+          const id = D.planning.find((l) => l.taak === t.id).id;
+          const gepl = t.budget - restUren(t);
+          if (x2 !== null && x1 !== undefined) {
+            inhoud += `<div class="g-task" data-id="${esc(id)}" title="${gepl}u van ${t.budget}u gepland" style="left:${x1 + 2}px;top:${y + 7}px;width:${Math.max(GW - 4, x2 - x1 - 2)}px">${gepl}u / ${t.budget}u</div>`;
+            t._x = [x1 + 2, x2, y + 7 + 8];
+          }
+        }
+        hoogte += GROWH;
+      }
+    }
+    for (const t of D.taken) {
+      if (!t.voorganger || !t._x || !D.taken.find((x) => x.id === t.voorganger && x._x)) continue;
+      const v = D.taken.find((x) => x.id === t.voorganger);
+      const x1 = v._x[1], y1 = v._x[2], x2 = t._x[0], y2 = t._x[2];
+      pijlen.push(`<path d="M ${x1} ${y1} H ${x1 + 10} V ${y2} H ${x2}" />`);
+    }
+    svg = `<svg class="g-pijlen" width="${breedte}" height="${hoogte}"><defs><marker id="gpijl" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--muted)"/></marker></defs><g fill="none" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#gpijl)">${pijlen.join("")}</g></svg>`;
+    for (const t of D.taken) delete t._x;
+  }
+
+  const hoogteTotaal = Math.max(hoogte, 120) + 40;
+  return `<section class="sec pl">
+    <div class="panel sec">
+      <div class="row pl-top">
+        <button class="btn" data-act="week" data-d="-28">‹ 4 weken</button>
+        <button class="btn" data-act="week" data-d="0">Deze week</button>
+        <button class="btn" data-act="week" data-d="28">4 weken ›</button>
+        <b>${kortDatum(dagen[0])} t/m ${kortDatum(dagen[GDAGEN - 1])}</b>
+        <span class="sp"></span>
+        <div class="tabs">
+          <button class="tab" data-act="gmode" data-m="res" aria-pressed="${modus === "res"}">Per resource</button>
+          <button class="tab" data-act="gmode" data-m="proj" aria-pressed="${modus === "proj"}">Per project</button>
+        </div>
+      </div>
+      <div class="grid-wrap">
+        <div class="gantt" style="width:${breedte}px;height:${hoogteTotaal}px">
+          <div class="g-kop" style="width:${breedte}px"><div class="g-day g-leeg" style="left:0;width:${GLABEL}px">${modus === "res" ? "Resource" : "Project / taak"}</div>${kopHtml}</div>
+          ${inhoud}
+          ${svg}
+        </div>
+      </div>
+    </div>
+  </section>`;
 }
 
 /* ---------- acties ---------- */
@@ -319,7 +415,7 @@ document.addEventListener("click", (e) => {
   const kies = e.target.closest("#ctxMenu [data-taak]");
   if (kies) { hideCtx(); planTaak(kies.dataset.taak, kies.dataset.res, kies.dataset.date); return; }
   if (!e.target.closest("#ctxMenu")) hideCtx();
-  const b = e.target.closest("[data-act='week'], [data-act='plandel'], [data-act='minu'], [data-act='plusu'], [data-act='voorstel']");
+  const b = e.target.closest("[data-act='week'], [data-act='plandel'], [data-act='minu'], [data-act='plusu'], [data-act='voorstel'], [data-act='gmode']");
   if (b) {
     const a = b.dataset.act;
     if (a === "week") {
@@ -327,14 +423,15 @@ document.addEventListener("click", (e) => {
       S.week = n ? addDays(S.week || maandag(), n) : maandag();
       render(); return;
     }
+    if (a === "gmode") { S.gmode = b.dataset.m; render(); return; }
     if (a === "voorstel") { toonVoorstel(b.dataset.id); return; }
     if (a === "minu") { wijzigUren(b.dataset.id, -1); return; }
     if (a === "plusu") { wijzigUren(b.dataset.id, 1); return; }
     D.planning = D.planning.filter((x) => x.id !== b.dataset.id);
     save(); return;
   }
-  const blk = e.target.closest(".blk");
-  if (blk) toonDetail(blk.dataset.id);
+  const blk = e.target.closest(".blk, .gbar, .g-task");
+  if (blk && blk.dataset.id) toonDetail(blk.dataset.id);
 });
 
 function toonVoorstel(taakId) {
