@@ -427,7 +427,30 @@ function toonCtx(x, y, resId, datum) {
   m.style.left = Math.min(x, window.innerWidth - w - 8) + "px";
   m.style.top = Math.min(y, window.innerHeight - h - 8) + "px";
 }
+/* Rechtermuisknop op een taak in Ongepland: kies resource en dag van de huidige week. */
+function toonTaakCtx(x, y, taakId) {
+  hideCtx();
+  const t = D.taken.find((q) => q.id === taakId);
+  if (!t || restUren(t) <= 0) return;
+  const mon = S.week || maandag();
+  const dagen = [0, 1, 2, 3, 4].map((i) => addDays(mon, i));
+  const rijen = [];
+  for (const r of D.resources.filter((q) => q.groep === t.groep)) for (const d of dagen) {
+    const vrij = capFor(r.id, d) - plannedFor(r.id, d);
+    if (vrij <= 0) continue;
+    rijen.push(`<button data-taak="${esc(t.id)}" data-res="${esc(r.id)}" data-date="${d}">${esc(r.naam)} · ${kortDatum(d)}<small>${vrij}u vrij</small></button>`);
+  }
+  const m = document.createElement("div");
+  m.id = "ctxMenu";
+  m.innerHTML = `<div class="kop">Inplannen: ${esc(t.omschrijving)} (nog ${restUren(t)}u)</div>${rijen.length ? rijen.join("") : '<p class="note" style="padding:8px 10px">Geen vrije plek deze week in deze groep.</p>'}`;
+  document.body.appendChild(m);
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.min(x, window.innerWidth - w - 8) + "px";
+  m.style.top = Math.min(y, window.innerHeight - h - 8) + "px";
+}
 document.addEventListener("contextmenu", (e) => {
+  const taak = e.target.closest("[data-drag='taak']");
+  if (taak) { e.preventDefault(); toonTaakCtx(e.clientX, e.clientY, taak.dataset.id); return; }
   const c = e.target.closest("[data-drop]");
   if (!c) { hideCtx(); return; }
   e.preventDefault();
