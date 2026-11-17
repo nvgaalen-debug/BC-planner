@@ -160,3 +160,6 @@ Nog te bouwen: lezen van BC bij het laden, en terugschrijven van de bevestigde p
 - In de blokdetails: Bevestigen (zet op Bevestigd) en Planning annuleren (zet op Geannuleerd).
 - Geannuleerd telt niet mee voor gepland, restant en capaciteit. Het blok blijft doorgestreept zichtbaar tot je het verwijdert.
 - Voorstel-blokken hebben een gestippelde rand. Test: `node tests/logic/status-planning.cjs`.
+
+## Gantt: bovenste rij zichtbaar (ronde 17)
+- De vaste kopregel van de Gantt is 34px hoog en bedekte de eerste rij. Rijen beginnen nu onder de kop (`KOPHOOGTE`).

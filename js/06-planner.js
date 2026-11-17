@@ -339,7 +339,8 @@ function viewGantt() {
   const xVan = (d) => GLABEL + dagen.indexOf(d) * GW;
   const breedte = GLABEL + GDAGEN * GW;
   const modus = S.gmode || "res";
-  let hoogte = 0, inhoud = "", svg = "";
+  const KOPHOOGTE = 34; // de vaste kopregel bedekt de bovenste 34px, dus rijen beginnen daaronder
+  let hoogte = KOPHOOGTE, inhoud = "", svg = "";
 
   const kopHtml = dagen.map((d, i) => {
     const wd = pYmd(d).getDay();
