@@ -334,6 +334,15 @@ const isoWeek = (s) => {
 
 /* ---------- Gantt: resource-weergave en project-weergave over vier weken ---------- */
 const GW = 44, GLABEL = 280, GDAGEN = 28, GROWH = 30, GLANE = 24;
+/* Vaste kleur per resourcegroep (palet: licht vlak, donkere rand, donkere tekst). */
+const GROEP_STIJL = {
+  Engineering: "background:#B5D4F4;border-color:#185FA5;color:#0C447C",
+  Werkvoorbereiding: "background:#CECBF6;border-color:#534AB7;color:#3C3489",
+  Productie: "background:#9FE1CB;border-color:#0F6E56;color:#085041",
+  Montage: "background:#F5C4B3;border-color:#993C1D;color:#712B13",
+};
+const groepStijl = (g) => GROEP_STIJL[g] || "background:var(--surface);border-color:var(--accent);color:var(--ink)";
+const groepLegenda = () => `<div class="g-legenda">${D.groepen.map((g) => `<span><i style="${groepStijl(g)}"></i>${esc(g)}</span>`).join("")}</div>`;
 const DAGNAAM = ["zo", "ma", "di", "wo", "do", "vr", "za"];
 function viewGantt() {
   ensureData();
@@ -360,7 +369,7 @@ function viewGantt() {
         const balken = lijnen.map((l) => {
           const k = per[l.datum] || 0; per[l.datum] = k + 1; lanes = Math.max(lanes, k + 1);
           const t = D.taken.find((x) => x.id === l.taak), pr = t && D.projecten.find((x) => x.id === t.project);
-          return `<div class="gbar" data-drag="plan" data-id="${esc(l.id)}" title="${esc(pr ? pr.nr : "")} · ${esc(t ? t.omschrijving : "")} · ${l.uren}u" style="left:${xVan(l.datum) + 2}px;top:${hoogte + 4 + k * GLANE}px;width:${GW - 4}px">${l.uren}u</div>`;
+          return `<div class="gbar" data-drag="plan" data-id="${esc(l.id)}" title="${esc(pr ? pr.nr : "")} · ${esc(t ? t.omschrijving : "")} · ${l.uren}u" style="${groepStijl(t ? t.groep : "")};left:${xVan(l.datum) + 2}px;top:${hoogte + 4 + k * GLANE}px;width:${GW - 4}px">${l.uren}u</div>`;
         }).join("");
         const h = lanes * GLANE + 8;
         const dropCellen = dagen.map((d, i) => `<div class="g-drop" data-drop="1" data-res="${esc(r.id)}" data-date="${d}" style="left:${GLABEL + i * GW}px;top:${hoogte}px;width:${GW}px;height:${h}px"></div>`).join("");
@@ -392,7 +401,7 @@ function viewGantt() {
             dagen.forEach((x, i) => { if (x <= b) e0 = i; });
             const x1 = GLABEL + s0 * GW + 2, x2 = GLABEL + (e0 + 1) * GW - 4;
             const gepl = geplandVan(t);
-            inhoud += `<div class="g-task${conflict ? " g-conflict" : ""}" data-taak="${esc(t.id)}" title="${gepl}u van ${t.budget}u gepland · ${periode}" style="left:${x1}px;top:${y + 7}px;width:${Math.max(GW - 4, x2 - x1)}px">${gepl}/${t.budget}u</div>`;
+            inhoud += `<div class="g-task${conflict ? " g-conflict" : ""}" data-taak="${esc(t.id)}" title="${gepl}u van ${t.budget}u gepland · ${periode}" style="${groepStijl(t.groep)};left:${x1}px;top:${y + 7}px;width:${Math.max(GW - 4, x2 - x1)}px">${gepl}/${t.budget}u</div>`;
             t._x = [x1, x2, y + 7 + 8];
           }
         }
@@ -424,6 +433,7 @@ function viewGantt() {
         </div>
       </div>
       ${printBalk(modus === "res" ? "Gantt per resource" : "Gantt per project")}
+      ${groepLegenda()}
       <div class="grid-wrap">
         <div class="gantt" style="width:${breedte}px;height:${hoogteTotaal}px">
           <div class="g-kop" style="width:${breedte}px"><div class="g-day g-leeg" style="left:0;width:${GLABEL}px">${modus === "res" ? "Resource" : "Project / taak"}</div>${kopHtml}</div>

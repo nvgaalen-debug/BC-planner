@@ -172,3 +172,8 @@ Nog te bouwen: lezen van BC bij het laden, en terugschrijven van de bevestigde p
 - De case-scenario's (24 → 32 uur, overplanning naar 8 uur) kun je met de planner zelf nabootsen.
 - Let op: de case laat 3000 starten vóór 2000 eindigt. Daarom heeft 3000 geen voorganger in de demo.
 - Test: `node tests/logic/case-p2026-031.cjs` controleert de demodata (montage dekkend, vier taken open) en de twee case-scenario's (24 naar 32 uur, en overplanning naar 8 uur).
+
+## Gantt: kleur per resourcegroep (ronde 19)
+- Balken (resource- en projectmodus) krijgen een vaste kleur per groep: Engineering blauw, Werkvoorbereiding paars, Productie groen, Montage koraal.
+- Een legenda staat boven het Gantt-overzicht.
+- Statussen blijven zichtbaar: gestippelde rand voor Voorstel, doorstreping voor Geannuleerd, oranje rand voor conflict.
