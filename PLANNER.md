@@ -68,3 +68,62 @@ Tabel in de BC-extensie: Project Task Dependency.
 - De Azure-app onderhoudt geen eigen afhankelijkheden; BC is de bron.
 
 Acceptatietest (uit spec): P2026-031, Ontwerp 16-20 nov (Lisa, 40u), Productie 23-27 nov (Ruud, 40u, voorganger 1000), Montage 30 nov-2 dec (Jeroen, 24u, voorganger 2000). Verschuif Ontwerp van 20 naar 24 november. Verwacht: Productie wordt herberekend, Montage wordt gecontroleerd op capaciteit van Ruud en Jeroen, conflicten zijn zichtbaar, de nieuwe projecteinddatum staat in de preview, en pas na bevestiging wordt opgeslagen.
+
+## Gantt en bezetting (ronde 3)
+- Projectbalk toont datums (taak en periode in de labelregel) en uren gepland/budget in de balk.
+- Balk met ⚠ "voorganger loopt uit" krijgt een oranje rand.
+- Klik op een projectbalk opent de taakdetail: budget, gepland, nog te plannen, start, verwacht einde, afhankelijkheid, resourceverdeling, en "Naar planning".
+- Bezetting toont per resourcegroep en week een tekort als de planning boven de beschikbare capaciteit ligt.
+- Nog niet gebouwd: slepen van projectbalken met preview; tekort als "nog in te plannen uren die niet passen".
+
+## Logica-check (ronde 4)
+- Regressietest: `node tests/logic/keten-acceptatie.cjs` (acceptatiescenario P2026-031 met en zonder verlof van Ruud).
+- Een opvolger die na de preview nog vóór het einde van de voorganger start, krijgt een expliciet conflict.
+- Nog niet gebouwd: punt 1 (BC-tabel Project Task Dependency in de AL-extensie) en punt 9 (planning terugschrijven naar BC). Beide hebben een BC-omgeving, API-rechten en besluit over schrijven nodig.
+
+## Basisfuncties (ronde 5)
+- Ongedaan maken: knop "Ongedaan maken" in de printbalk en Ctrl+Z. Max 30 stappen, binnen de sessie.
+- Verlof zetten en weghalen: rechtermuisknop op een cel, hele dag. Het verlof telt direct mee in de capaciteit.
+- Testscript: `node tests/logic/undo-verlof.cjs`.
+
+## BC is leidend (ronde 6)
+Uitgangspunt: BC is de bron voor alle stamgegevens. De planner houdt geen eigen kopie bij die afwijkt.
+
+| Gegeven | Bron | In de planner |
+|---|---|---|
+| Resources en resourcegroepen | BC | alleen lezen |
+| Verlof en niet-beschikbaarheid | BC | alleen lezen (lokaal verlof-invoeren is verwijderd) |
+| Projecten en projecttaken, budget | BC (Job, Job Task) | alleen lezen |
+| Afhankelijkheden | BC (Project Task Dependency) | alleen lezen |
+| Planningsregels (dagplanning) | BC (Job Planning Lines) | eerst lokaal, daarna terugschrijven naar BC (nog te bouwen) |
+| Gerealiseerde uren | BC (Job Ledger Entry) | alleen lezen |
+
+Nog te bouwen: lezen van BC bij het laden, en terugschrijven van de bevestigde planning. Alleen veilig met een BC-omgeving, API-rechten en een afgesproken moment van synchroniseren.
+
+## AI-uitleg bij conflicten (ronde 7)
+- Knop "Uitleg" in de preview-dialoog. Stuurt alleen de conflictteksten naar `/api/uitleg`; resourcenamen worden vervangen door de groep.
+- `api/src/functions/uitleg.mjs`: met AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY en AZURE_OPENAI_DEPLOYMENT wordt een model in de EU-regio aangeroepen. Zonder die variabelen, of bij een fout, komt er een vaste uitleg terug. De app werkt dus ook zonder AI.
+- Het model beslist niets en rekent niets. Het legt alleen uit en stelt hooguit vervolgstappen voor.
+- Vereist voor productie: verwerkersovereenkomst met Microsoft voor de Azure OpenAI-resource, en een DPIA.
+
+## Controle preview en verlof (ronde 8)
+- Preview: ja. Vóór opslaan zie je welke opvolgers verschuiven (werkdagen), de projecteinddatum voor en na, het aantal gewijzigde blokken en de conflicten. Annuleren laat alles ongewijzigd.
+- Verlof in capaciteit: ja, de capaciteit is 0 op een verlofdag. Nieuw plannen, verslepen en het ±-knopje weigeren op zo'n dag.
+- Verlof komt nog niet uit BC. Het verlof in de planner is demodata. De koppeling met BC is nog te bouwen.
+- Test: `node tests/logic/verlof-capaciteit.cjs`.
+
+## BC-koppeling: testknop en demodata (ronde 9)
+- Instellingen → "Test verbinding" roept `/api/bc/afhankelijkheden` aan en toont het aantal gevonden afhankelijkheden, of de fout.
+- Demodata blijft de standaard en werkt zonder BC.
+- Nog niet gedaan: BC-nummers als id's gebruiken en projecten, taken, resources en verlof uit BC laden. Dat volgt zodra de sandbox-test van de afhankelijkheden is gelukt, en de endpoints voor die gegevens zijn nagelopen.
+
+## Gegevensbron: demo en BC (ronde 10)
+- Instellingen → Gegevensbron: Demodata of Business Central.
+- In BC-modus schrijft de planner lokaal niets weg, en laadt hij de demodata niet opnieuw. Zo blijft de demo intact in de opslag.
+- BC-modus toont nu nog de demodata, want het laden van BC-data is nog niet gebouwd. Dat volgt.
+- Test: `node tests/logic/bron-demo.cjs`.
+
+## Uitleg-provider (ronde 11)
+- `/api/uitleg` kiest in volgorde: Anthropic (ANTHROPIC_API_KEY, model via ANTHROPIC_MODEL, standaard claude-haiku-5-5), dan Azure OpenAI, dan vaste uitleg.
+- Voor testen: alleen ANTHROPIC_API_KEY instellen in de Static Web App.
+- Voor productie met persoonsgegevens-achtige invoer: verwerkersafspraken en DPIA eerst afronden, ook al gaat er alleen geanonimiseerde tekst naar het model.

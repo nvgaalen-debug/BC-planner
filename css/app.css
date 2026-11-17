@@ -185,7 +185,7 @@ body.sleep{cursor:grabbing;user-select:none}
 .g-kop .g-leeg{position:sticky;left:0;z-index:4;background:var(--surface)}
 .g-grp{position:absolute;left:0;height:26px;line-height:26px;padding:0 10px;background:var(--sunk);font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .g-grp b{text-transform:none;letter-spacing:0;color:var(--ink)}
-.g-lbl{position:absolute;left:0;width:220px;padding:6px 10px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface);font-weight:600;font-size:13px;z-index:2;box-sizing:border-box;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.g-lbl{position:absolute;left:0;width:280px;padding:6px 10px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface);font-weight:600;font-size:13px;z-index:2;box-sizing:border-box;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .g-lbl small{display:block;color:var(--muted);font-weight:400;font-size:11.5px}
 .g-task-lbl{display:flex;align-items:center;gap:6px;padding:0 10px;font-weight:500}
 .g-task-lbl small{display:inline;font-size:11px}
@@ -224,3 +224,5 @@ table.cap th small{display:block;font-weight:400;color:var(--muted);font-size:11
   table.cap{zoom:.9}
   .legend{font-size:9px}
 }
+.g-task-lbl small{display:inline;margin-left:6px}
+.g-task.g-conflict{outline:2px solid #b45309;outline-offset:-1px}

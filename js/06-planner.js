@@ -57,13 +57,32 @@ function demo(mon) {
 }
 
 /* Demodata zetten als de data op de server ontbreekt of van een oudere versie is. */
+/* Ongedaan maken: bewaar de staat vóór elke opslag (max 30). */
+let vorigeStaat = null;
+const ongedaanStapel = [];
 function ensureData() {
-  if (D.versie !== DEMO_VERSIE) { Object.assign(D, demo(maandag())); pushState(); }
+  if (D.versie !== DEMO_VERSIE && !(D.settings?.bron === "bc")) { Object.assign(D, demo(maandag())); pushState(); }
+  if (vorigeStaat === null) vorigeStaat = JSON.stringify(D);
 }
 ensureData();
 
 /* Wijziging opslaan op de server en het scherm verversen. */
-function save() { pushState(); render(); }
+function save() {
+  if (vorigeStaat !== null) { ongedaanStapel.push(vorigeStaat); if (ongedaanStapel.length > 30) ongedaanStapel.shift(); }
+  vorigeStaat = JSON.stringify(D);
+  if (!bcModus()) pushState();
+  render();
+}
+/* BC-modus: de planner schrijft lokaal niets weg, zodat de demodata in de opslag intact blijft. */
+const bcModus = () => D.settings?.bron === "bc";
+function undo() {
+  const s = ongedaanStapel.pop();
+  if (!s) { toast("Er is niets om ongedaan te maken."); return; }
+  D = JSON.parse(s); vorigeStaat = s;
+  if (!bcModus()) pushState();
+  render();
+  toast("Laatste wijziging ongedaan gemaakt.");
+}
 
 /* ---------- rekenregels ---------- */
 const plannedFor = (res, datum) => D.planning.filter((l) => l.resource === res && l.datum === datum).reduce((a, l) => a + l.uren, 0);
@@ -173,7 +192,19 @@ function viewInstellingen() {
       <label class="fld"><span>Titel</span><input name="titel" value="${esc(D.settings?.titel || "")}"></label>
       <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
     </form>
-    <p class="note">Later hier: de BC-omgeving en de bron voor verlof en capaciteit.</p>
+    <p class="note">De planner werkt nu met lokale demodata. Die blijft beschikbaar voor demo's, ook als BC is gekoppeld.</p>
+    <h3 style="margin:14px 0 4px">Gegevensbron</h3>
+    <div class="row">
+      <button class="btn ${bcModus() ? "" : "primary"}" data-act="bron" data-bron="demo">Demodata</button>
+      <button class="btn ${bcModus() ? "primary" : ""}" data-act="bron" data-bron="bc">Business Central</button>
+    </div>
+    <p class="note">${bcModus()
+      ? "BC-modus is actief. Lokaal wordt niets weggeschreven, zodat de demodata intact blijft. De BC-data wordt nog niet geladen: het scherm toont tijdelijk de demodata, zonder wijzigingen op te slaan."
+      : "Demodata is actief. Wijzigingen worden lokaal opgeslagen."}</p>
+    <h3 style="margin:14px 0 4px">Business Central</h3>
+    <p class="note">Test of de koppeling met de BC-extensie werkt. Dit leest alleen; er wordt niets gewijzigd.</p>
+    <div class="row"><button class="btn" data-act="bctest">Test verbinding</button></div>
+    <p id="bcStatus" class="note" aria-live="polite"></p>
   </div></section>`;
 }
 
@@ -210,6 +241,19 @@ function viewCapaciteit() {
       rijen += `<tr><th class="res">${esc(r.naam)}<small>${r.uren * 5}u per week</small></th>${cellen}</tr>`;
     }
   }
+  const tekortRegels = [];
+  for (const g of D.groepen) {
+    const rs = D.resources.filter((x) => x.groep === g);
+    weken.forEach((w) => {
+      const dagen = [0, 1, 2, 3, 4].map((k) => addDays(w, k));
+      const cap = rs.reduce((a, r) => a + dagen.reduce((b, d) => b + capFor(r.id, d), 0), 0);
+      const gep = rs.reduce((a, r) => a + dagen.reduce((b, d) => b + plannedFor(r.id, d), 0), 0);
+      if (gep > cap) tekortRegels.push(`⚠ ${esc(g)} heeft in week ${isoWeek(w)} een tekort van ${gep - cap} u capaciteit (${gep} u gepland, ${cap} u beschikbaar).`);
+    });
+  }
+  const tekortHtml = tekortRegels.length
+    ? `<p class="note" style="color:#b45309">${tekortRegels.join("<br>")}</p>`
+    : `<p class="note">Geen tekorten in de komende 8 weken.</p>`;
   return `<section class="sec pl">
     <div class="panel sec">
       <div class="row pl-top">
@@ -221,6 +265,7 @@ function viewCapaciteit() {
         <span class="note">Klik op een week om die in de planning te bekijken</span>
       </div>
       ${printBalk("Bezetting per week")}
+      ${tekortHtml}
       <div class="grid-wrap">
         <table class="plan cap">
           <thead><tr><th>Resource</th>${kop}</tr></thead>
@@ -245,7 +290,7 @@ const isoWeek = (s) => {
 };
 
 /* ---------- Gantt: resource-weergave en project-weergave over vier weken ---------- */
-const GW = 44, GLABEL = 220, GDAGEN = 28, GROWH = 30, GLANE = 24;
+const GW = 44, GLABEL = 280, GDAGEN = 28, GROWH = 30, GLANE = 24;
 const DAGNAAM = ["zo", "ma", "di", "wo", "do", "vr", "za"];
 function viewGantt() {
   ensureData();
@@ -289,7 +334,10 @@ function viewGantt() {
         const y = hoogte;
         taakY[t.id] = y;
         const lijnen = D.planning.filter((l) => l.taak === t.id).map((l) => l.datum).sort();
-        inhoud += `<div class="g-lbl g-task-lbl" style="top:${y}px;height:${GROWH}px">${esc(t.omschrijving)} <small>${esc(t.groep)}</small></div>`;
+        const vz = t.voorganger ? datumsVan(t.voorganger).slice(-1)[0] : null;
+        const conflict = !!(vz && lijnen.length && lijnen[0] <= vz);
+        const periode = lijnen.length ? `${kortDatum(lijnen[0])} – ${kortDatum(lijnen[lijnen.length - 1])}` : "niet gepland";
+        inhoud += `<div class="g-lbl g-task-lbl" title="${esc(t.omschrijving)} · ${esc(t.groep)} · ${periode}" style="top:${y}px;height:${GROWH}px">${esc(t.omschrijving)}<small>${esc(t.groep)} · ${periode}${conflict ? " · ⚠ voorganger loopt uit" : ""}</small></div>`;
         if (lijnen.length) {
           const a = lijnen[0], b = lijnen[lijnen.length - 1];
           const first = dagen[0], last = dagen[dagen.length - 1];
@@ -299,9 +347,8 @@ function viewGantt() {
             let e0 = 0;
             dagen.forEach((x, i) => { if (x <= b) e0 = i; });
             const x1 = GLABEL + s0 * GW + 2, x2 = GLABEL + (e0 + 1) * GW - 4;
-            const id = D.planning.find((l) => l.taak === t.id).id;
             const gepl = t.budget - restUren(t);
-            inhoud += `<div class="g-task" data-id="${esc(id)}" title="${gepl}u van ${t.budget}u gepland" style="left:${x1}px;top:${y + 7}px;width:${Math.max(GW - 4, x2 - x1)}px">${gepl}u / ${t.budget}u</div>`;
+            inhoud += `<div class="g-task${conflict ? " g-conflict" : ""}" data-taak="${esc(t.id)}" title="${gepl}u van ${t.budget}u gepland · ${periode}" style="left:${x1}px;top:${y + 7}px;width:${Math.max(GW - 4, x2 - x1)}px">${gepl}/${t.budget}u</div>`;
             t._x = [x1, x2, y + 7 + 8];
           }
         }
@@ -347,7 +394,7 @@ function viewGantt() {
 /* ---------- afdrukken ---------- */
 function printBalk(titel) {
   const vandaag = new Date().toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
-  return `<div class="row print-hide" style="justify-content:flex-end"><button class="btn" data-act="print">Afdrukken</button></div>
+  return `<div class="row print-hide" style="justify-content:flex-end"><button class="btn" data-act="undo" title="Ctrl+Z">Ongedaan maken</button><button class="btn" data-act="print">Afdrukken</button></div>
     <h2 class="print-kop">${esc(D.settings?.titel || "BC Resource Planner")} · ${esc(titel)} · ${vandaag}</h2>`;
 }
 
@@ -416,6 +463,8 @@ function previewKeten(taakId, wijzigingen) {
           conflicten.push({ taak: b, tekst: `${r ? r.naam : "Resource"} heeft op ${kortDatum(nieuw)} onvoldoende capaciteit voor ${l.uren}u; blok blijft op ${kortDatum(l.datum)}.` });
         }
       }
+      const blijvend = lijnenVan(b.id).filter((l) => l.datum <= eind);
+      if (blijvend.length) conflicten.push({ taak: b, tekst: `${b.omschrijving} kan niet starten na ${kortDatum(eind)}: ${blijvend.length} blok(ken) konden niet verschuiven.` });
       const nieuweEind = lijnenVan(b.id).map((l) => l.datum).sort().slice(-1)[0];
       if (b.deadline && nieuweEind > b.deadline) conflicten.push({ taak: b, tekst: `Deadline ${kortDatum(b.deadline)} wordt overschreden.` });
       const oudeStart = [...origineel.values()].filter((l) => l.taak === b.id).map((l) => l.datum).sort()[0];
@@ -480,6 +529,7 @@ function planTaak(taakId, resId, datum) {
   if (!t || !r) return;
   if (t.groep !== r.groep) { toast(`${t.groep}-werk kan niet naar ${r.naam} (${r.groep}).`, 4000); return; }
   if (!voorgangerOk(t, datum)) return;
+  if (capFor(r.id, datum) <= 0) { toast(`${r.naam} is niet beschikbaar op ${kortDatum(datum)} (verlof).`, 4000); return; }
   const rest = restUren(t);
   if (rest <= 0) { toast("Deze taak is al volledig ingepland."); return; }
   const vrij = capFor(r.id, datum) - plannedFor(r.id, datum);
@@ -496,6 +546,7 @@ function verplaatsPlan(id, resId, datum) {
   const t = D.taken.find((x) => x.id === l.taak), r = D.resources.find((x) => x.id === resId);
   if (!t || !r) return;
   if (t.groep !== r.groep) { toast(`${t.groep}-werk kan niet naar ${r.naam} (${r.groep}).`, 4000); return; }
+  if (capFor(resId, datum) <= 0) { toast(`${r.naam} is niet beschikbaar op ${kortDatum(datum)} (verlof).`, 4000); return; }
   if (!voorgangerOk(t, datum)) return;
   const prev = previewKeten(t.id, [{ id, datum, resource: resId }]);
   if (!prev.blokken.length && !prev.conflicten.length) {
@@ -529,12 +580,29 @@ function toonKetenPreview(t, prev, bevestig) {
     <p class="note">${prev.blokken.length} planningblok${prev.blokken.length === 1 ? "" : "ken"} worden gewijzigd.</p>
     ${conf}
     <p class="note">Er wordt niets opgeslagen tot je accepteert.</p>
-    <div class="dlg-foot"><span class="sp"></span><button class="btn" id="ketenNee">Annuleren</button><button class="btn primary" id="ketenJa">Accepteren</button></div></div>`;
+    <div id="ketenUitleg" class="note"></div>
+    <div class="dlg-foot"><button class="btn" id="ketenUitlegKnop" ${prev.conflicten.length ? "" : "disabled"}>Uitleg</button><span class="sp"></span><button class="btn" id="ketenNee">Annuleren</button><button class="btn primary" id="ketenJa">Accepteren</button></div></div>`;
   ov.hidden = false;
   const sluit = () => { ov.hidden = true; ov.innerHTML = ""; };
   document.getElementById("ketenNee").onclick = sluit;
   ov.onclick = (e) => { if (e.target === ov) sluit(); };
   document.getElementById("ketenJa").onclick = () => { sluit(); bevestig(); };
+  document.getElementById("ketenUitlegKnop").onclick = async () => {
+    const uitleg = document.getElementById("ketenUitleg");
+    uitleg.textContent = "Uitleg wordt opgesteld…";
+    // Geen namen naar buiten: resourcenamen worden vervangen door de groep.
+    const anoniem = prev.conflicten.map((c) => {
+      let tekst = c.tekst;
+      for (const r of D.resources) if (r.naam) tekst = tekst.split(r.naam).join(`resource ${r.groep}`);
+      return tekst;
+    });
+    try {
+      const d = await api("/api/uitleg", { method: "POST", body: JSON.stringify({ conflicten: anoniem }) });
+      uitleg.innerHTML = `<p>${esc(d.tekst).replace(/\n/g, "<br>")}</p><small>${d.bron === "ai" ? "Uitleg door AI" : "Vaste uitleg (AI niet ingesteld)"}</small>`;
+    } catch (e) {
+      uitleg.textContent = "Uitleg is niet beschikbaar: " + (typeof apiErr === "function" ? apiErr(e) : "geen verbinding.");
+    }
+  };
 }
 
 /* Uren van een blok met 1 uur verhogen of verlagen. Het restbudget volgt vanzelf. */
@@ -543,6 +611,7 @@ function wijzigUren(id, delta) {
   const t = l && D.taken.find((x) => x.id === l.taak);
   if (!l || !t) return;
   if (delta > 0 && restUren(t) <= 0) { toast("Er is geen restbudget meer voor deze taak."); return; }
+  if (delta > 0 && capFor(l.resource, l.datum) <= 0) { toast("Deze resource is op deze dag niet beschikbaar (verlof)."); return; }
   if (l.uren + delta < 1) return;
   const nieuweUren = l.uren + delta;
   const prev = previewKeten(t.id, [{ id, datum: l.datum, resource: l.resource, uren: nieuweUren }]);
@@ -590,7 +659,84 @@ function toonDetail(id) {
   ov.onclick = (e) => { if (e.target === ov) sluit(); };
 }
 
+/* Taakdetail vanuit de Gantt: budget, planning, afhankelijkheid en resourceverdeling. */
+function toonTaakDetail(taakId) {
+  const t = D.taken.find((x) => x.id === taakId);
+  if (!t) return;
+  const p = D.projecten.find((x) => x.id === t.project);
+  const lijnen = D.planning.filter((l) => l.taak === taakId).sort((a, b) => (a.datum < b.datum ? -1 : 1));
+  const gepl = t.budget - restUren(t);
+  const perRes = {};
+  for (const l of lijnen) perRes[l.resource] = (perRes[l.resource] || 0) + l.uren;
+  const resRegels = Object.entries(perRes).map(([id, u]) => { const r = D.resources.find((x) => x.id === id); return `<li>${esc(r ? r.naam : id)}: ${u} u</li>`; }).join("") || "<li>Nog niet ingepland</li>";
+  const start = lijnen.length ? lijnen[0].datum : null, eind = lijnen.length ? lijnen[lijnen.length - 1].datum : null;
+  const vz = t.voorganger ? datumsVan(t.voorganger).slice(-1)[0] : null;
+  const conflict = !!(vz && start && start <= vz);
+  let ov = document.getElementById("detailModal");
+  if (!ov) { ov = document.createElement("div"); ov.id = "detailModal"; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="dlg" role="dialog" aria-modal="true">
+    <h3>${esc(p ? p.nr : "")} · ${esc(t.omschrijving)}</h3>
+    <p class="note">${esc(p ? p.naam : "")}</p>
+    <dl class="kv">
+      <dt>Resourcegroep</dt><dd>${esc(t.groep)}</dd>
+      <dt>Budget</dt><dd>${t.budget} u</dd>
+      <dt>Gepland</dt><dd>${gepl} u</dd>
+      <dt>Nog te plannen</dt><dd>${restUren(t)} u</dd>
+      <dt>Gerealiseerd</dt><dd>${t.gerealiseerd || 0} u</dd>
+      <dt>Start</dt><dd>${start ? kortDatum(start) : "–"}</dd>
+      <dt>Verwacht einde</dt><dd>${eind ? kortDatum(eind) : "–"}</dd>
+      ${t.deadline ? `<dt>Deadline</dt><dd>${kortDatum(t.deadline)}</dd>` : ""}
+    </dl>
+    <h4 class="note">Afhankelijkheid</h4>
+    <dl class="kv">
+      <dt>${t.voorganger ? "🔗 Voorganger" : "Voorganger"}</dt><dd>${t.voorganger ? esc(omschrijvingVan(t.voorganger)) : "geen"}</dd>
+      ${t.voorganger ? `<dt>Type</dt><dd>Finish-to-Start</dd><dt>Wachttijd</dt><dd>${t.lag || 0} werkdagen</dd>` : ""}
+    </dl>
+    ${conflict ? `<p class="note" style="color:#b45309">⚠ Voorganger loopt uit: eerst ${kortDatum(vz)} af.</p>` : ""}
+    <h4 class="note">Resourceplanning</h4>
+    <ul>${resRegels}</ul>
+    <div class="dlg-foot"><button class="btn" id="taakNaarPlanning">Naar planning</button><span class="sp"></span><button class="btn primary" id="taakSluit">Sluiten</button></div></div>`;
+  ov.hidden = false;
+  const sluit = () => { ov.hidden = true; ov.innerHTML = ""; };
+  document.getElementById("taakSluit").onclick = sluit;
+  document.getElementById("taakNaarPlanning").onclick = () => {
+    sluit();
+    S.tab = "overzicht";
+    S.week = start ? maandag(start) : null;
+    render();
+  };
+  ov.onclick = (e) => { if (e.target === ov) sluit(); };
+}
+
 /* ---------- events ---------- */
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-act='undo']")) { undo(); return; }
+}); 
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-act='bron']");
+  if (!b) return;
+  D.settings = D.settings || {};
+  D.settings.bron = b.dataset.bron === "bc" ? "bc" : "demo";
+  pushState();   // alleen de keuze zelf wordt opgeslagen; de demodata blijft gelijk
+  render();
+});
+document.addEventListener("click", async (e) => {
+  if (!e.target.closest("[data-act='bctest']")) return;
+  const st = document.getElementById("bcStatus");
+  if (st) st.textContent = "Verbinding testen…";
+  try {
+    const d = await api("/api/bc/afhankelijkheden");
+    const n = (d.items || []).length;
+    if (st) st.textContent = `Verbonden met Business Central: ${n} afhankelijkheid${n === 1 ? "" : "heden"} gevonden.`;
+  } catch (err) {
+    if (st) st.textContent = "Geen verbinding: " + (typeof apiErr === "function" ? apiErr(err) : "onbekende fout") + ". Controleer de omgevingsvariabelen.";
+  }
+});
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.target.closest("input, textarea, [contenteditable]")) {
+    e.preventDefault(); undo();
+  }
+});
 let suppressClick = false;
 document.addEventListener("click", (e) => {
   if (suppressClick) { suppressClick = false; return; }
@@ -616,7 +762,9 @@ document.addEventListener("click", (e) => {
   }
   const cap = e.target.closest("table.cap td.cel");
   if (cap) { S.week = cap.dataset.week; S.tab = "overzicht"; render(); return; }
-  const blk = e.target.closest(".blk, .gbar, .g-task");
+  const gt = e.target.closest(".g-task");
+  if (gt && gt.dataset.taak) { toonTaakDetail(gt.dataset.taak); return; }
+  const blk = e.target.closest(".blk, .gbar");
   if (blk && blk.dataset.id) toonDetail(blk.dataset.id);
 });
 
@@ -699,9 +847,9 @@ function toonCtx(x, y, resId, datum) {
   if (!r) return;
   const opties = D.taken.filter((t) => t.groep === r.groep && restUren(t) > 0);
   const p = (id) => (D.projecten.find((q) => q.id === id) || {}).nr || "";
-  const items = opties.length
+  const items = (opties.length
     ? opties.map((t) => `<button data-taak="${esc(t.id)}" data-res="${esc(resId)}" data-date="${datum}">${esc(p(t.project))} · ${esc(t.omschrijving)}<small>nog ${restUren(t)}u${t.voorganger ? " · na " + esc(omschrijvingVan(t.voorganger)) : ""}</small></button>`).join("")
-    : '<p class="note" style="padding:8px 10px">Geen ongeplande taken voor deze groep.</p>';
+    : '<p class="note" style="padding:8px 10px">Geen ongeplande taken voor deze groep.</p>');
   const m = document.createElement("div");
   m.id = "ctxMenu";
   m.innerHTML = `<div class="kop">Inplannen op ${kortDatum(datum)} · ${esc(r.naam)}</div>${items}`;
