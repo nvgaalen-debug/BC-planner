@@ -26,9 +26,11 @@ function regels(conflicten) {
     "\nControleer eerst de capaciteit van de betrokken groep op die dagen. Kijk daarna of de voorganger eerder kan eindigen, of dat de taak over meerdere dagen kan worden gesplitst.";
 }
 
+let laatsteFout = null;
+
 async function metAnthropic(conflicten) {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return null;
+  if (!key) { laatsteFout = "ANTHROPIC_API_KEY ontbreekt op de server"; return null; }
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
@@ -39,7 +41,7 @@ async function metAnthropic(conflicten) {
       messages: [{ role: "user", content: "Conflicten:\n" + conflicten.map((c) => `- ${c}`).join("\n") }],
     }),
   });
-  if (!r.ok) return null;
+  if (!r.ok) { laatsteFout = `Anthropic antwoordde met status ${r.status}`; return null; }
   const d = await r.json();
   const tekst = (d.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
   return tekst || null;
@@ -78,11 +80,12 @@ async function handler(req) {
     .slice(0, MAX_CONFLICTEN)
     .map((x) => x.slice(0, MAX_LEN));
   if (!conflicten.length) return json({ tekst: "Geen conflicten.", bron: "regels" });
+  laatsteFout = null;
   try {
     const ai = (await metAnthropic(conflicten)) || (await metAzure(conflicten));
     if (ai) return json({ tekst: ai, bron: "ai" });
-  } catch (e) { /* val terug op vaste regels */ }
-  return json({ tekst: regels(conflicten), bron: "regels" });
+  } catch (e) { laatsteFout = "Aanroep van het model mislukt: " + (e.message || "onbekende fout"); }
+  return json({ tekst: regels(conflicten), bron: "regels", fout: laatsteFout || "Geen AI-instelling gevonden" });
 }
 
 app.http("uitleg", { route: "uitleg", methods: ["POST"], authLevel: "anonymous", handler });

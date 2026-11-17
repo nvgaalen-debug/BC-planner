@@ -598,7 +598,8 @@ function toonKetenPreview(t, prev, bevestig) {
     });
     try {
       const d = await api("/api/uitleg", { method: "POST", body: JSON.stringify({ conflicten: anoniem }) });
-      uitleg.innerHTML = `<p>${esc(d.tekst).replace(/\n/g, "<br>")}</p><small>${d.bron === "ai" ? "Uitleg door AI" : "Vaste uitleg (AI niet ingesteld)"}</small>`;
+      const label = d.bron === "ai" ? "Uitleg door AI" : `Vaste uitleg. Reden: ${esc(d.fout || "onbekend")}`;
+      uitleg.innerHTML = `<p>${esc(d.tekst).replace(/\n/g, "<br>")}</p><small>${label}</small>`;
     } catch (e) {
       uitleg.textContent = "Uitleg is niet beschikbaar: " + (typeof apiErr === "function" ? apiErr(e) : "geen verbinding.");
     }
