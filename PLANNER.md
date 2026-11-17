@@ -127,3 +127,21 @@ Nog te bouwen: lezen van BC bij het laden, en terugschrijven van de bevestigde p
 - `/api/uitleg` kiest in volgorde: Anthropic (ANTHROPIC_API_KEY, model via ANTHROPIC_MODEL, standaard claude-haiku-5-5), dan Azure OpenAI, dan vaste uitleg.
 - Voor testen: alleen ANTHROPIC_API_KEY instellen in de Static Web App.
 - Voor productie met persoonsgegevens-achtige invoer: verwerkersafspraken en DPIA eerst afronden, ook al gaat er alleen geanonimiseerde tekst naar het model.
+
+## Finish-to-start bij plannen (ronde 12)
+- Een taak met een voorganger kan pas worden ingepland als de voorganger volledig is ingepland (geen open uren meer) én de opvolger na het laatste blok van de voorganger start.
+- Blokken van de voorganger zonder planning, of met nog open uren, blokkeren het plannen van de opvolger.
+
+## Projectfilter (ronde 13)
+- Keuzelijst "Project" boven Ongepland. Kies je een project, dan toont Ongepland alleen de taken daarvan.
+- In het raster blijven de blokken van dat project gekleurd, de andere worden gedimd.
+- De filter wordt niet opgeslagen; hij is per sessie. Test: `node tests/logic/projectfilter.cjs`.
+- Nog niet in de Gantt. Dat is een kleine uitbreiding.
+
+## Demodata uitgebreid (ronde 14, DEMO_VERSIE 5)
+- 4 resources erbij (Bram, Ilse, Ton, Eva), totaal 9. Bestaande id's zijn ongewijzigd.
+- 4e project P2026-040 "Kantoorpand Harderwijk: lichtstraat" met drie taken in een keten (Ontwerp → Productie → Montage, deadline op t10).
+- Extra taken: afwerking op P2026-031 en vliesgevelmontage op P2026-034, beide na een voorganger.
+- Extra planning: lichtstraat deels gepland (t9 nog open), Lisa op dag 2 dubbel ingepland voor een tekort in Bezetting.
+- Extra verlof: Ton op dag 4.
+- Let op: bij een nieuwe DEMO_VERSIE wordt de demodata opnieuw gezet (alleen zonder BC-bron).

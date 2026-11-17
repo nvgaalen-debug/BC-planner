@@ -11,7 +11,7 @@ const addDays = (s, n) => { const d = pYmd(s); d.setDate(d.getDate() + n); retur
 function maandag(s) { const d = s ? pYmd(s) : new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); }
 const kortDatum = (s) => pYmd(s).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 
-const DEMO_VERSIE = 4;
+const DEMO_VERSIE = 5;
 
 function demo(mon) {
   const d = (n) => addDays(mon, n);
@@ -25,11 +25,16 @@ function demo(mon) {
       { id: "r3", naam: "Jeroen", groep: "Montage", uren: 8 },
       { id: "r4", naam: "Marcel", groep: "Montage", uren: 8 },
       { id: "r5", naam: "Sanne", groep: "Productie", uren: 8 },
+      { id: "r6", naam: "Bram", groep: "Ontwerp", uren: 8 },
+      { id: "r7", naam: "Ilse", groep: "Ontwerp", uren: 8 },
+      { id: "r8", naam: "Ton", groep: "Montage", uren: 8 },
+      { id: "r9", naam: "Eva", groep: "Productie", uren: 8 },
     ],
     projecten: [
       { id: "p1", nr: "P2026-031", naam: "Woningbouw Hoogkerk: kozijnen en deuren" },
       { id: "p2", nr: "P2026-034", naam: "Kantoor Zwolle: vliesgevel" },
       { id: "p3", nr: "P2026-037", naam: "Serre Apeldoorn" },
+      { id: "p4", nr: "P2026-040", naam: "Kantoorpand Harderwijk: lichtstraat" },
     ],
     taken: [
       { id: "t1", project: "p1", groep: "Ontwerp", omschrijving: "Opname en tekeningen", budget: 16, gerealiseerd: 4 },
@@ -39,6 +44,11 @@ function demo(mon) {
       { id: "t5", project: "p2", groep: "Productie", omschrijving: "Vliesgevel fabriceren", budget: 80, voorganger: "t4" },
       { id: "t6", project: "p3", groep: "Montage", omschrijving: "Serre plaatsen en afdichten", budget: 24, voorganger: "t7" },
       { id: "t7", project: "p3", groep: "Ontwerp", omschrijving: "Serre ontwerp", budget: 12 },
+      { id: "t8", project: "p4", groep: "Ontwerp", omschrijving: "Lichtstraat ontwerp", budget: 32 },
+      { id: "t9", project: "p4", groep: "Productie", omschrijving: "Lichtstraat fabriceren", budget: 64, voorganger: "t8" },
+      { id: "t10", project: "p4", groep: "Montage", omschrijving: "Lichtstraat monteren", budget: 40, voorganger: "t9", deadline: d(14) },
+      { id: "t11", project: "p1", groep: "Montage", omschrijving: "Afwerking en oplevering", budget: 16, voorganger: "t3" },
+      { id: "t12", project: "p2", groep: "Montage", omschrijving: "Vliesgevel montage", budget: 48, voorganger: "t5" },
     ],
     planning: [
       { id: "l1", taak: "t1", resource: "r1", datum: d(0), uren: 6 },
@@ -51,8 +61,19 @@ function demo(mon) {
       { id: "l8", taak: "t4", resource: "r1", datum: d(3), uren: 4 },
       { id: "l9", taak: "t5", resource: "r5", datum: d(4), uren: 4 },
       { id: "l10", taak: "t6", resource: "r4", datum: d(4), uren: 8 },
+      { id: "l11", taak: "t8", resource: "r6", datum: d(0), uren: 8 },
+      { id: "l12", taak: "t8", resource: "r6", datum: d(1), uren: 8 },
+      { id: "l13", taak: "t8", resource: "r7", datum: d(2), uren: 8 },
+      { id: "l14", taak: "t8", resource: "r7", datum: d(3), uren: 8 },
+      { id: "l15", taak: "t9", resource: "r9", datum: d(4), uren: 8 },
+      { id: "l16", taak: "t9", resource: "r9", datum: d(7), uren: 8 },
+      { id: "l17", taak: "t9", resource: "r5", datum: d(7), uren: 8 },
+      { id: "l18", taak: "t7", resource: "r1", datum: d(2), uren: 4 },
     ],
-    verlof: [{ id: "v1", resource: "r3", datum: d(2), uren: 8 }],
+    verlof: [
+      { id: "v1", resource: "r3", datum: d(2), uren: 8 },
+      { id: "v2", resource: "r8", datum: d(4), uren: 8 },
+    ],
   };
 }
 
@@ -102,7 +123,8 @@ function status(r, datum) {
 function blokHtml(l) {
   const t = D.taken.find((x) => x.id === l.taak);
   const p = t && D.projecten.find((x) => x.id === t.project);
-  return `<div class="blk" data-drag="plan" data-id="${esc(l.id)}">
+  const dim = S.proj && t && t.project !== S.proj ? " dim" : "";
+  return `<div class="blk${dim}" data-drag="plan" data-id="${esc(l.id)}">
     <span>${esc(p ? p.nr : "")} · ${esc(t ? t.omschrijving : "")}</span>
     <span class="ctl"><button data-act="minu" data-id="${esc(l.id)}" title="1 uur minder">−</button><b>${l.uren}u</b><button data-act="plusu" data-id="${esc(l.id)}" title="1 uur meer">+</button></span>
     <button class="x" data-act="plandel" data-id="${esc(l.id)}" title="Verwijderen">×</button></div>`;
@@ -133,6 +155,7 @@ function viewPlanner() {
   let ongepland = "";
   let totaalNog = 0;
   for (const p of D.projecten) {
+    if (S.proj && S.proj !== p.id) continue;
     const ts = D.taken.filter((t) => t.project === p.id && restUren(t) > 0);
     if (!ts.length) continue;
     ongepland += `<div class="pj"><b>${esc(p.nr)}</b> <span>${esc(p.naam)}</span>` +
@@ -165,6 +188,11 @@ function viewPlanner() {
         <aside class="ong">
           <h3>Ongepland</h3>
           <p class="note">Sleep een taak naar een cel. Er wordt het resterende budget gepland, tot maximaal de dagcapaciteit.</p>
+          <label class="fld"><span>Project</span>
+            <select data-act="projfilter">
+              <option value="">Alle projecten</option>
+              ${D.projecten.map((p) => `<option value="${esc(p.id)}"${S.proj === p.id ? " selected" : ""}>${esc(p.nr)} ${esc(p.naam)}</option>`).join("")}
+            </select></label>
           ${ongepland}
         </aside>
         <div class="grid-wrap">
@@ -418,6 +446,9 @@ const omschrijvingVan = (taakId) => (D.taken.find((x) => x.id === taakId) || {})
 /* Een blok van de opvolger mag niet vóór het einde van de voorganger beginnen. */
 function voorgangerOk(t, datum) {
   if (!t.voorganger) return true;
+  // Finish-to-start: de voorganger moet volledig zijn ingepland, anders is het einde onbekend.
+  const vt = D.taken.find((x) => x.id === t.voorganger);
+  if (vt && restUren(vt) > 0) { toast(`Plan eerst ${omschrijvingVan(t.voorganger)} volledig in (nog ${restUren(vt)}u open).`, 5000); return false; }
   const vd = datumsVan(t.voorganger);
   if (!vd.length) return true;
   if (datum <= vd[vd.length - 1]) { toast(`Plan na ${kortDatum(vd[vd.length - 1])}: eerst ${omschrijvingVan(t.voorganger)} af.`, 5000); return false; }
@@ -713,6 +744,9 @@ function toonTaakDetail(taakId) {
 document.addEventListener("click", (e) => {
   if (e.target.closest("[data-act='undo']")) { undo(); return; }
 }); 
+document.addEventListener("change", (e) => {
+  if (e.target.dataset && e.target.dataset.act === "projfilter") { S.proj = e.target.value || null; render(); }
+});
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-act='bron']");
   if (!b) return;
