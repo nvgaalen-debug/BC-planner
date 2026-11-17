@@ -11,24 +11,25 @@ const addDays = (s, n) => { const d = pYmd(s); d.setDate(d.getDate() + n); retur
 function maandag(s) { const d = s ? pYmd(s) : new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return ymd(d); }
 const kortDatum = (s) => pYmd(s).toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
 
-const DEMO_VERSIE = 5;
+const DEMO_VERSIE = 6;
 
 function demo(mon) {
   const d = (n) => addDays(mon, n);
   return {
     versie: DEMO_VERSIE,
     settings: { titel: "BC Resource Planner" },
-    groepen: ["Ontwerp", "Productie", "Montage"],
+    groepen: ["Engineering", "Werkvoorbereiding", "Productie", "Montage"],
     resources: [
-      { id: "r1", naam: "Lisa", groep: "Ontwerp", uren: 8 },
+      { id: "r1", naam: "Lisa", groep: "Engineering", uren: 8 },
       { id: "r2", naam: "Ruud", groep: "Productie", uren: 8 },
       { id: "r3", naam: "Jeroen", groep: "Montage", uren: 8 },
       { id: "r4", naam: "Marcel", groep: "Montage", uren: 8 },
       { id: "r5", naam: "Sanne", groep: "Productie", uren: 8 },
-      { id: "r6", naam: "Bram", groep: "Ontwerp", uren: 8 },
-      { id: "r7", naam: "Ilse", groep: "Ontwerp", uren: 8 },
+      { id: "r6", naam: "Bram", groep: "Werkvoorbereiding", uren: 8 },
+      { id: "r7", naam: "Ilse", groep: "Engineering", uren: 8 },
       { id: "r8", naam: "Ton", groep: "Montage", uren: 8 },
       { id: "r9", naam: "Eva", groep: "Productie", uren: 8 },
+      { id: "r10", naam: "Piet", groep: "Montage", uren: 8 },
     ],
     projecten: [
       { id: "p1", nr: "P2026-031", naam: "Woningbouw Hoogkerk: kozijnen en deuren" },
@@ -37,32 +38,34 @@ function demo(mon) {
       { id: "p4", nr: "P2026-040", naam: "Kantoorpand Harderwijk: lichtstraat" },
     ],
     taken: [
-      { id: "t1", project: "p1", groep: "Ontwerp", omschrijving: "Opname en tekeningen", budget: 16, gerealiseerd: 4 },
-      { id: "t2", project: "p1", groep: "Productie", omschrijving: "Kozijnen en deuren fabriceren", budget: 48, gerealiseerd: 0 },
-      { id: "t3", project: "p1", groep: "Montage", omschrijving: "Montage op bouwplaats", budget: 24, voorganger: "t2", deadline: d(4) },
-      { id: "t4", project: "p2", groep: "Ontwerp", omschrijving: "Vliesgevel ontwerp", budget: 40 },
+      // P2026-031 volgens de praktijkcase: standaard BC-taken, geen maatwerk.
+      // Remaining = BC Remaining Quantity (hoeveelheid min gebruik); bij gebruik gelijk aan budget.
+      { id: "t21", project: "p1", groep: "Engineering", omschrijving: "Ontwerp", budget: 16, gerealiseerd: 0, remaining: 16 },
+      { id: "t22", project: "p1", groep: "Werkvoorbereiding", omschrijving: "Werkvoorbereiding", budget: 24, gerealiseerd: 0, remaining: 24 },
+      { id: "t23", project: "p1", groep: "Productie", omschrijving: "Kozijnen en deuren produceren", budget: 80, gerealiseerd: 0, remaining: 80 },
+      { id: "t24", project: "p1", groep: "Montage", omschrijving: "Montage op bouwplaats", budget: 24, gerealiseerd: 0, remaining: 24, voorganger: "t23" },
+      { id: "t25", project: "p1", groep: "Montage", omschrijving: "Oplevering", budget: 8, gerealiseerd: 0, remaining: 8, voorganger: "t24" },
+      // Overige projecten
+      { id: "t4", project: "p2", groep: "Engineering", omschrijving: "Vliesgevel ontwerp", budget: 40 },
       { id: "t5", project: "p2", groep: "Productie", omschrijving: "Vliesgevel fabriceren", budget: 80, voorganger: "t4" },
       { id: "t6", project: "p3", groep: "Montage", omschrijving: "Serre plaatsen en afdichten", budget: 24, voorganger: "t7" },
-      { id: "t7", project: "p3", groep: "Ontwerp", omschrijving: "Serre ontwerp", budget: 12 },
-      { id: "t8", project: "p4", groep: "Ontwerp", omschrijving: "Lichtstraat ontwerp", budget: 32 },
+      { id: "t7", project: "p3", groep: "Engineering", omschrijving: "Serre ontwerp", budget: 12 },
+      { id: "t8", project: "p4", groep: "Engineering", omschrijving: "Lichtstraat ontwerp", budget: 32 },
       { id: "t9", project: "p4", groep: "Productie", omschrijving: "Lichtstraat fabriceren", budget: 64, voorganger: "t8" },
       { id: "t10", project: "p4", groep: "Montage", omschrijving: "Lichtstraat monteren", budget: 40, voorganger: "t9", deadline: d(14) },
-      { id: "t11", project: "p1", groep: "Montage", omschrijving: "Afwerking en oplevering", budget: 16, voorganger: "t3" },
       { id: "t12", project: "p2", groep: "Montage", omschrijving: "Vliesgevel montage", budget: 48, voorganger: "t5" },
     ],
     planning: [
-      { id: "l1", taak: "t1", resource: "r1", datum: d(0), uren: 6 },
-      { id: "l2", taak: "t1", resource: "r1", datum: d(1), uren: 6 },
-      { id: "l3", taak: "t2", resource: "r2", datum: d(0), uren: 8 },
-      { id: "l4", taak: "t2", resource: "r2", datum: d(1), uren: 8 },
-      { id: "l5", taak: "t2", resource: "r5", datum: d(2), uren: 8 },
-      { id: "l6", taak: "t3", resource: "r3", datum: d(3), uren: 8 },
+      // Montage 4000 uit de case: 24 uur verdeeld over Jeroen en Marcel
+      { id: "l19", taak: "t24", resource: "r3", datum: d(14), uren: 8 },
+      { id: "l20", taak: "t24", resource: "r3", datum: d(15), uren: 8 },
+      { id: "l21", taak: "t24", resource: "r4", datum: d(16), uren: 8 },
       { id: "l7", taak: "t4", resource: "r1", datum: d(2), uren: 8 },
       { id: "l8", taak: "t4", resource: "r1", datum: d(3), uren: 4 },
       { id: "l9", taak: "t5", resource: "r5", datum: d(4), uren: 4 },
       { id: "l10", taak: "t6", resource: "r4", datum: d(4), uren: 8 },
-      { id: "l11", taak: "t8", resource: "r6", datum: d(0), uren: 8 },
-      { id: "l12", taak: "t8", resource: "r6", datum: d(1), uren: 8 },
+      { id: "l11", taak: "t8", resource: "r7", datum: d(0), uren: 8 },
+      { id: "l12", taak: "t8", resource: "r7", datum: d(1), uren: 8 },
       { id: "l13", taak: "t8", resource: "r7", datum: d(2), uren: 8 },
       { id: "l14", taak: "t8", resource: "r7", datum: d(3), uren: 8 },
       { id: "l15", taak: "t9", resource: "r9", datum: d(4), uren: 8 },

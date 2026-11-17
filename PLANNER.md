@@ -163,3 +163,12 @@ Nog te bouwen: lezen van BC bij het laden, en terugschrijven van de bevestigde p
 
 ## Gantt: bovenste rij zichtbaar (ronde 17)
 - De vaste kopregel van de Gantt is 34px hoog en bedekte de eerste rij. Rijen beginnen nu onder de kop (`KOPHOOGTE`).
+
+## Demodata = praktijkcase P2026-031 (ronde 18, DEMO_VERSIE 6)
+- Uitgangspunt is de praktijkcase: standaard BC-projecttaken, geen maatwerk. P2026-031 heeft taken 1000 Ontwerp, 2000 Werkvoorbereiding, 3000 Kozijnen en deuren produceren, 4000 Montage op bouwplaats en 5000 Oplevering.
+- Groepen: Engineering, Werkvoorbereiding, Productie en Montage. Piet (Montage) is toegevoegd.
+- Montage 4000 is 24 uur gepland (Jeroen 30 nov en 1 dec, Marcel 2 dec). Dat geeft "Planning dekkend", zoals in de case.
+- Taken 1000–3000 zijn nog niet gepland, dus die staan in Ongepland.
+- De case-scenario's (24 → 32 uur, overplanning naar 8 uur) kun je met de planner zelf nabootsen.
+- Let op: de case laat 3000 starten vóór 2000 eindigt. Daarom heeft 3000 geen voorganger in de demo.
+- Test: `node tests/logic/case-p2026-031.cjs` controleert de demodata (montage dekkend, vier taken open) en de twee case-scenario's (24 naar 32 uur, en overplanning naar 8 uur).
