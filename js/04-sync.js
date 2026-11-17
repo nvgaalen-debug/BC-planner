@@ -19,8 +19,21 @@ function startFout(msg) {
   setLaden(`<p class="note" style="color:var(--bad)">${esc(msg)}</p><div class="row"><button class="btn primary" data-act="srvretry">Opnieuw proberen</button></div>`);
 }
 
+/* Wie is ingelogd en mag die plannen? Komt van Azure Static Web Apps (/.auth/me). */
+let ME = { naam: "", planner: true };
+async function laadMe() {
+  try {
+    const r = await fetch("/.auth/me", { cache: "no-store" });
+    const j = await r.json();
+    const p = j && j.clientPrincipal;
+    if (p) ME = { naam: p.userDetails || "", planner: (p.userRoles || []).some((x) => x === "planner" || x === "beheerder") };
+  } catch { /* lokaal zonder SWA: geen login, alleen wachtwoord */ }
+}
+const meNaam = () => ME.naam || "";
+
 async function initSync() {
   if (!SERVER) { SYNC.sv = 0; SYNC_READY = true; render(); return; }
+  await laadMe();
   setLaden("<p class=\"note\">Gegevens laden van de server…</p>");
   let r;
   try { r = await withPw(() => api("/api/state")); }

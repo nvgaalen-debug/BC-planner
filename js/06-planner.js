@@ -591,7 +591,7 @@ function planTaak(taakId, resId, datum) {
   if (rest <= 0) { toast("Deze taak is al volledig ingepland."); return; }
   const vrij = capFor(r.id, datum) - plannedFor(r.id, datum);
   const uren = Math.min(rest, vrij > 0 ? vrij : r.uren);
-  D.planning.push({ id: uid(), taak: t.id, resource: r.id, datum, uren, status: "Gepland" });
+  D.planning.push({ id: uid(), taak: t.id, resource: r.id, datum, uren, status: "Gepland", door: meNaam(), gewijzigd: new Date().toISOString() });
   controleer(r.id, datum);
   save();
 }
@@ -704,6 +704,7 @@ function toonDetail(id) {
       <dt>Datum</dt><dd>${kortDatum(l.datum)}</dd>
       <dt>Gepland op dit blok</dt><dd>${l.uren}u</dd>
       <dt>Status</dt><dd>${statusVan(l)}</dd>
+      <dt>Gepland door</dt><dd>${esc(l.door || "onbekend")}${l.gewijzigd ? " · " + esc(kortDatum(l.gewijzigd.slice(0, 10))) : ""}</dd>
       <dt>Projectbudget</dt><dd>${t.budget}u</dd>
       <dt>Totaal gepland</dt><dd>${geplandVan(t)}u</dd>
       <dt>Gerealiseerd</dt><dd>${t.gerealiseerd || 0}u</dd>
@@ -716,7 +717,7 @@ function toonDetail(id) {
     <div class="dlg-foot">${statusVan(l) !== "Bevestigd" && telt(l) ? '<button class="btn" id="detailBevestig">Bevestigen</button>' : ""}${telt(l) ? '<button class="btn" id="detailAnnuleer">Planning annuleren</button>' : ""}<span class="sp"></span><button class="btn primary" id="detailSluit">Sluiten</button></div></div>`;
   ov.hidden = false;
   const sluit = () => { ov.hidden = true; ov.innerHTML = ""; };
-  const zet = (st) => { const x = D.planning.find((q) => q.id === l.id); if (x) x.status = st; sluit(); save(); };
+  const zet = (st) => { const x = D.planning.find((q) => q.id === l.id); if (x) { x.status = st; x.door = meNaam(); x.gewijzigd = new Date().toISOString(); } sluit(); save(); };
   const bev = document.getElementById("detailBevestig"); if (bev) bev.onclick = () => zet("Bevestigd");
   const ann = document.getElementById("detailAnnuleer"); if (ann) ann.onclick = () => zet("Geannuleerd");
   document.getElementById("detailSluit").onclick = sluit;
@@ -858,7 +859,7 @@ function toonVoorstel(taakId) {
   document.getElementById("voorNee").onclick = sluit;
   ov.onclick = (e) => { if (e.target === ov) sluit(); };
   document.getElementById("voorJa").onclick = () => {
-    for (const x of regels) D.planning.push({ id: uid(), taak: x.taak, resource: x.resource, datum: x.datum, uren: x.uren, status: "Voorstel" });
+    for (const x of regels) D.planning.push({ id: uid(), taak: x.taak, resource: x.resource, datum: x.datum, uren: x.uren, status: "Voorstel", door: meNaam(), gewijzigd: new Date().toISOString() });
     sluit();
     controleer(regels[0].resource, regels[0].datum);
     save();

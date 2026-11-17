@@ -20,7 +20,7 @@
 
 import { app } from "@azure/functions";
 import { TableClient } from "@azure/data-tables";
-import { json, appOk } from "../lib/auth.mjs";
+import { json, appOk, plannerOk, gebruiker } from "../lib/auth.mjs";
 
 const TABLE = "appstate";
 const PK = "app";
@@ -75,6 +75,7 @@ async function handler(req) {
   }
 
   if (req.method === "PUT") {
+    if (!plannerOk(req)) return json({ error: "Je hebt alleen leesrechten. Vraag een planner om wijzigingen door te voeren." }, 403);
     let body;
     try {
       body = await req.json();
@@ -110,7 +111,7 @@ async function handler(req) {
       const oldCount = meta ? Number(meta.chunks || 0) : 0;
       for (let i = count; i < oldCount; i++) await t.deleteEntity(PK, chunkKey(i)).catch(() => {});
       // 3. Metadata als laatste bijwerken: dan is de nieuwe versie pas zichtbaar als alle stukken er staan
-      const newMeta = { partitionKey: PK, rowKey: META, version: currentVersion + 1, chunks: count, updatedAt: new Date().toISOString() };
+      const newMeta = { partitionKey: PK, rowKey: META, version: currentVersion + 1, chunks: count, updatedAt: new Date().toISOString(), updatedBy: (gebruiker(req)?.naam || "onbekend").slice(0, 200) };
       if (meta) await t.updateEntity(newMeta, "Replace", { etag: meta.etag || "*" });
       else await t.createEntity(newMeta);
     } catch (e) {

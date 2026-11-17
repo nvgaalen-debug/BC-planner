@@ -177,3 +177,21 @@ Nog te bouwen: lezen van BC bij het laden, en terugschrijven van de bevestigde p
 - Balken (resource- en projectmodus) krijgen een vaste kleur per groep: Engineering blauw, Werkvoorbereiding paars, Productie groen, Montage koraal.
 - Een legenda staat boven het Gantt-overzicht.
 - Statussen blijven zichtbaar: gestippelde rand voor Voorstel, doorstreping voor Geannuleerd, oranje rand voor conflict.
+
+## Browsertest en gelijktijdig gebruik (ronde 20)
+- Browsertest: `python3 tests/browser/smoke.py` draait de planner in Chrome (Playwright) met een gemockte API. Controleert: blokken in de planning, de bovenste Gantt-rij onder de kopregel, de legenda, de projectfilter en het 409-conflict bij opslaan. Schermafbeeldingen komen in tests/browser/.
+- Gelijktijdig gebruik: de server controleert de versie bij elke PUT (409 bij conflict), en de client laadt dan de serverversie opnieuw in. Een overschreven wijziging gaat dus niet stil verloren, maar de wijziging van de tweede gebruiker wordt niet samengevoegd.
+- Nog open: gebruikers en rollen (vereist keuze van identiteitsprovider), wijzigingslogboek (kan zonder identiteit als versie + tijd + samenvatting), en een samenvoegfunctie bij conflict.
+
+## Gebruikers en rollen met Entra ID (ronde 21)
+- Inloggen via Azure Static Web Apps (Entra ID). De API leest de ingelogde gebruiker uit `x-ms-client-principal`; de client leest die via `/.auth/me`.
+- Rollen: `planner` en `beheerder` mogen wijzigen. Andere ingelogde gebruikers kunnen alleen kijken; een schrijfpoging krijgt 403.
+- Elke planning krijgt `door` (wie) en `gewijzigd` (wanneer). Het detailvenster toont dat. De serverversie krijgt `updatedBy`.
+- Zonder SWA-login (lokaal) geldt het wachtwoord uit APP_PASSWORD, zoals voorheen.
+- Test: `node tests/logic/auth-rollen.mjs`.
+
+### Instellen (eenmalig, in Azure)
+1. Entra: maak een app-registratie voor de planner, met redirect-URI `https://<jouw-app>/.auth/login/aad/callback`.
+2. Voeg app-rollen toe: `planner` en `beheerder`. Wijs ze toe aan de gebruikers (Enterprise-toepassing > Gebruikers en groepen).
+3. Static Web App > Verificatie: voeg Microsoft (Entra ID) toe met de client-ID en het client-secret van de app-registratie. Zet het secret in de app-instellingen, niet in de repo.
+4. Controleer na implementatie met `/.auth/me` in de browser: de rollen moeten in `userRoles` staan. Staan ze er niet, dan moet het rollen-mapping van SWA worden nagelopen.
