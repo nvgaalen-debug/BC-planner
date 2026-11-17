@@ -145,3 +145,18 @@ Nog te bouwen: lezen van BC bij het laden, en terugschrijven van de bevestigde p
 - Extra planning: lichtstraat deels gepland (t9 nog open), Lisa op dag 2 dubbel ingepland voor een tekort in Bezetting.
 - Extra verlof: Ton op dag 4.
 - Let op: bij een nieuwe DEMO_VERSIE wordt de demodata opnieuw gezet (alleen zonder BC-bron).
+
+## BC-API-spec: nog te plannen (ronde 15)
+- Effectief restant per taak: `remaining` (BC-prognose) als die er is, anders budget min gerealiseerd (fallback).
+- Nog te plannen = MAX(0, effectief restant − gepland). Gerealiseerde uren tellen niet dubbel mee.
+- Signaal per taak: "Extra werk plannen", "Planning dekkend" of "Te veel gepland". Zichtbaar in Ongepland en in de details.
+- Prognosebron staat in de details: BC-prognose of fallback.
+- Tests: `node tests/logic/bc-prognose.cjs` (voorbeelden uit de spreadsheet).
+- Nog niet: statusveld per toewijzing (Voorstel/Gepland/Bevestigd/Geannuleerd) en het laden van `remaining` uit BC.
+
+## Status per toewijzing (ronde 16)
+- Statussen: Voorstel, Gepland, Bevestigd, Geannuleerd. Regels zonder status gelden als Gepland.
+- Nieuwe planning krijgt Gepland. Accepteren van een Voorstel zet de regels op Voorstel.
+- In de blokdetails: Bevestigen (zet op Bevestigd) en Planning annuleren (zet op Geannuleerd).
+- Geannuleerd telt niet mee voor gepland, restant en capaciteit. Het blok blijft doorgestreept zichtbaar tot je het verwijdert.
+- Voorstel-blokken hebben een gestippelde rand. Test: `node tests/logic/status-planning.cjs`.

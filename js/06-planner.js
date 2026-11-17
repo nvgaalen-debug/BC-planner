@@ -106,10 +106,22 @@ function undo() {
 }
 
 /* ---------- rekenregels ---------- */
-const plannedFor = (res, datum) => D.planning.filter((l) => l.resource === res && l.datum === datum).reduce((a, l) => a + l.uren, 0);
+/* Status per toewijzing: Voorstel, Gepland, Bevestigd of Geannuleerd. Geannuleerd telt niet mee. */
+const statusVan = (l) => l.status || "Gepland";
+const telt = (l) => statusVan(l) !== "Geannuleerd";
+const plannedFor = (res, datum) => D.planning.filter((l) => telt(l) && l.resource === res && l.datum === datum).reduce((a, l) => a + l.uren, 0);
 const verlofFor = (res, datum) => D.verlof.filter((v) => v.resource === res && v.datum === datum).reduce((a, v) => a + v.uren, 0);
 const capFor = (resId, datum) => { const r = D.resources.find((x) => x.id === resId); return r ? Math.max(0, r.uren - verlofFor(resId, datum)) : 0; };
-const restUren = (t) => t.budget - D.planning.filter((l) => l.taak === t.id).reduce((a, l) => a + l.uren, 0);
+/* Volgens de BC-API-spec: effectief restant = BC-prognose (remaining), zonder prognose budget - gerealiseerd. */
+const geplandVan = (t) => D.planning.filter((l) => telt(l) && l.taak === t.id).reduce((a, l) => a + l.uren, 0);
+const effRest = (t) => t.remaining != null ? Math.max(0, t.remaining) : Math.max(0, t.budget - (t.gerealiseerd || 0));
+const restUren = (t) => Math.max(0, effRest(t) - geplandVan(t));
+const prognoseBron = (t) => t.remaining != null ? "BC-prognose" : "Fallback: budget min gerealiseerd";
+function signaal(t) {
+  const p = geplandVan(t), e = effRest(t);
+  if (p > e) return "Te veel gepland";
+  return e - p > 0 ? "Extra werk plannen" : "Planning dekkend";
+}
 function status(r, datum) {
   const cap = capFor(r.id, datum), gep = plannedFor(r.id, datum);
   if (cap === 0 && gep === 0) return "na";
@@ -123,7 +135,7 @@ function status(r, datum) {
 function blokHtml(l) {
   const t = D.taken.find((x) => x.id === l.taak);
   const p = t && D.projecten.find((x) => x.id === t.project);
-  const dim = S.proj && t && t.project !== S.proj ? " dim" : "";
+  const dim = (S.proj && t && t.project !== S.proj ? " dim" : "") + (telt(l) ? "" : " ann") + (statusVan(l) === "Voorstel" ? " voorstel" : "");
   return `<div class="blk${dim}" data-drag="plan" data-id="${esc(l.id)}">
     <span>${esc(p ? p.nr : "")} · ${esc(t ? t.omschrijving : "")}</span>
     <span class="ctl"><button data-act="minu" data-id="${esc(l.id)}" title="1 uur minder">−</button><b>${l.uren}u</b><button data-act="plusu" data-id="${esc(l.id)}" title="1 uur meer">+</button></span>
@@ -161,12 +173,12 @@ function viewPlanner() {
     ongepland += `<div class="pj"><b>${esc(p.nr)}</b> <span>${esc(p.naam)}</span>` +
       ts.map((t) => {
         const nog = restUren(t); totaalNog += nog;
-        const gepl = t.budget - nog, real = t.gerealiseerd || 0;
+        const gepl = geplandVan(t), real = t.gerealiseerd || 0;
         return `<div class="taak" data-drag="taak" data-id="${esc(t.id)}">
           <span>${esc(t.omschrijving)}</span>
           <small>${esc(t.groep)}</small>
           ${t.voorganger ? `<small class="meta">na: ${esc(omschrijvingVan(t.voorganger))}</small>` : ""}
-          <span class="nu">${nog}u nog te plannen</span>
+          <span class="nu">${nog}u nog te plannen · ${signaal(t)}</span>
           <button class="btn sm" data-act="voorstel" data-id="${esc(t.id)}">Voorstel</button>
           <small class="meta">${t.budget}u budget · ${gepl}u gepland · ${real}u gerealiseerd</small></div>`;
       }).join("") + `</div>`;
@@ -375,7 +387,7 @@ function viewGantt() {
             let e0 = 0;
             dagen.forEach((x, i) => { if (x <= b) e0 = i; });
             const x1 = GLABEL + s0 * GW + 2, x2 = GLABEL + (e0 + 1) * GW - 4;
-            const gepl = t.budget - restUren(t);
+            const gepl = geplandVan(t);
             inhoud += `<div class="g-task${conflict ? " g-conflict" : ""}" data-taak="${esc(t.id)}" title="${gepl}u van ${t.budget}u gepland · ${periode}" style="left:${x1}px;top:${y + 7}px;width:${Math.max(GW - 4, x2 - x1)}px">${gepl}/${t.budget}u</div>`;
             t._x = [x1, x2, y + 7 + 8];
           }
@@ -565,7 +577,7 @@ function planTaak(taakId, resId, datum) {
   if (rest <= 0) { toast("Deze taak is al volledig ingepland."); return; }
   const vrij = capFor(r.id, datum) - plannedFor(r.id, datum);
   const uren = Math.min(rest, vrij > 0 ? vrij : r.uren);
-  D.planning.push({ id: uid(), taak: t.id, resource: r.id, datum, uren });
+  D.planning.push({ id: uid(), taak: t.id, resource: r.id, datum, uren, status: "Gepland" });
   controleer(r.id, datum);
   save();
 }
@@ -677,16 +689,22 @@ function toonDetail(id) {
       <dt>Resource</dt><dd>${esc(r ? r.naam : "")}</dd>
       <dt>Datum</dt><dd>${kortDatum(l.datum)}</dd>
       <dt>Gepland op dit blok</dt><dd>${l.uren}u</dd>
+      <dt>Status</dt><dd>${statusVan(l)}</dd>
       <dt>Projectbudget</dt><dd>${t.budget}u</dd>
-      <dt>Totaal gepland</dt><dd>${t.budget - restUren(t)}u</dd>
+      <dt>Totaal gepland</dt><dd>${geplandVan(t)}u</dd>
       <dt>Gerealiseerd</dt><dd>${t.gerealiseerd || 0}u</dd>
       <dt>Nog te plannen</dt><dd>${restUren(t)}u</dd>
+      <dt>Signaal</dt><dd>${signaal(t)}</dd>
+      <dt>Prognosebron</dt><dd>${prognoseBron(t)}</dd>
       ${t.voorganger ? `<dt>🔗 Afhankelijk van</dt><dd>${esc(omschrijvingVan(t.voorganger))}</dd>` : ""}
       ${t.voorganger && datumsVan(t.voorganger).length && l.datum <= datumsVan(t.voorganger).slice(-1)[0] ? `<dt>⚠ Voorganger loopt uit</dt><dd>eerst ${kortDatum(datumsVan(t.voorganger).slice(-1)[0])} af</dd>` : ""}
     </dl>
-    <div class="dlg-foot"><span class="sp"></span><button class="btn primary" id="detailSluit">Sluiten</button></div></div>`;
+    <div class="dlg-foot">${statusVan(l) !== "Bevestigd" && telt(l) ? '<button class="btn" id="detailBevestig">Bevestigen</button>' : ""}${telt(l) ? '<button class="btn" id="detailAnnuleer">Planning annuleren</button>' : ""}<span class="sp"></span><button class="btn primary" id="detailSluit">Sluiten</button></div></div>`;
   ov.hidden = false;
   const sluit = () => { ov.hidden = true; ov.innerHTML = ""; };
+  const zet = (st) => { const x = D.planning.find((q) => q.id === l.id); if (x) x.status = st; sluit(); save(); };
+  const bev = document.getElementById("detailBevestig"); if (bev) bev.onclick = () => zet("Bevestigd");
+  const ann = document.getElementById("detailAnnuleer"); if (ann) ann.onclick = () => zet("Geannuleerd");
   document.getElementById("detailSluit").onclick = sluit;
   ov.onclick = (e) => { if (e.target === ov) sluit(); };
 }
@@ -697,7 +715,7 @@ function toonTaakDetail(taakId) {
   if (!t) return;
   const p = D.projecten.find((x) => x.id === t.project);
   const lijnen = D.planning.filter((l) => l.taak === taakId).sort((a, b) => (a.datum < b.datum ? -1 : 1));
-  const gepl = t.budget - restUren(t);
+  const gepl = geplandVan(t);
   const perRes = {};
   for (const l of lijnen) perRes[l.resource] = (perRes[l.resource] || 0) + l.uren;
   const resRegels = Object.entries(perRes).map(([id, u]) => { const r = D.resources.find((x) => x.id === id); return `<li>${esc(r ? r.naam : id)}: ${u} u</li>`; }).join("") || "<li>Nog niet ingepland</li>";
@@ -714,6 +732,8 @@ function toonTaakDetail(taakId) {
       <dt>Budget</dt><dd>${t.budget} u</dd>
       <dt>Gepland</dt><dd>${gepl} u</dd>
       <dt>Nog te plannen</dt><dd>${restUren(t)} u</dd>
+      <dt>Signaal</dt><dd>${signaal(t)}</dd>
+      <dt>Prognosebron</dt><dd>${prognoseBron(t)}</dd>
       <dt>Gerealiseerd</dt><dd>${t.gerealiseerd || 0} u</dd>
       <dt>Start</dt><dd>${start ? kortDatum(start) : "–"}</dd>
       <dt>Verwacht einde</dt><dd>${eind ? kortDatum(eind) : "–"}</dd>
@@ -824,7 +844,7 @@ function toonVoorstel(taakId) {
   document.getElementById("voorNee").onclick = sluit;
   ov.onclick = (e) => { if (e.target === ov) sluit(); };
   document.getElementById("voorJa").onclick = () => {
-    for (const x of regels) D.planning.push({ id: uid(), taak: x.taak, resource: x.resource, datum: x.datum, uren: x.uren });
+    for (const x of regels) D.planning.push({ id: uid(), taak: x.taak, resource: x.resource, datum: x.datum, uren: x.uren, status: "Voorstel" });
     sluit();
     controleer(regels[0].resource, regels[0].datum);
     save();

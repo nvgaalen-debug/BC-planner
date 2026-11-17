@@ -227,3 +227,5 @@ table.cap th small{display:block;font-weight:400;color:var(--muted);font-size:11
 .g-task-lbl small{display:inline;margin-left:6px}
 .g-task.g-conflict{outline:2px solid #b45309;outline-offset:-1px}
 .blk.dim{opacity:.35}
+.blk.ann{opacity:.35;text-decoration:line-through}
+.blk.voorstel{background:var(--surface);color:var(--ink);outline:1.5px dashed var(--accent);outline-offset:-1px}
