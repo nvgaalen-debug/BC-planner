@@ -24,16 +24,5 @@
       "/css/*",
       "/js/*"
     ]
-  },
-  "auth": {
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/0afd5102-e2f5-4162-a25d-e347f3407dac/v2.0",
-          "clientIdSettingName": "AAD_CLIENT_ID",
-          "clientSecretSettingName": "AAD_CLIENT_SECRET"
-        }
-      }
-    }
   }
 }
