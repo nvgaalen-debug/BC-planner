@@ -28,7 +28,10 @@ async function token() {
       grant_type: "client_credentials",
     }),
   });
-  if (!r.ok) throw new Error("Token ophalen mislukt (" + r.status + ").");
+  if (!r.ok) {
+    const body = (await r.json().catch(() => ({}))).error_description || "";
+    throw new Error("Token ophalen mislukt (" + r.status + "). " + String(body).split("\r\n")[0].slice(0, 200));
+  }
   return (await r.json()).access_token;
 }
 
@@ -45,7 +48,12 @@ async function handler(req) {
     const env = encodeURIComponent(process.env.BC_ENVIRONMENT);
     const url = `https://api.businesscentral.dynamics.com/v2.0/${process.env.BC_TENANT_ID}/${env}/api/think2software/planner/v1.0/companies(${process.env.BC_COMPANY_ID})/projectDependencies`;
     const r = await fetch(url, { headers: { authorization: "Bearer " + t, accept: "application/json" } });
-    if (!r.ok) return json({ error: "BC gaf fout " + r.status + "." }, 502);
+    if (!r.ok) {
+      // Toon de melding van BC zelf (geen geheimen), zodat je ziet wat er mis is.
+      const detail = (await r.text().catch(() => "")).slice(0, 300);
+      const hint = r.headers.get("www-authenticate") || "";
+      return json({ error: "BC gaf fout " + r.status + ".", detail, hint, url }, 502);
+    }
     const d = await r.json();
     const items = (d.value || []).map((x) => ({
       projectNo: x.projectNo,
@@ -57,7 +65,7 @@ async function handler(req) {
     }));
     return json({ items });
   } catch (e) {
-    return json({ error: "BC is niet bereikbaar." }, 502);
+    return json({ error: "BC is niet bereikbaar.", detail: String(e && e.message || e).slice(0, 300) }, 502);
   }
 }
 

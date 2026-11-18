@@ -11,10 +11,10 @@ async function api(path, opts = {}) {
   let d = {}; try { d = await r.json(); } catch (e) {}
   if (r.status === 401) throw { code: "pw", message: d.error, used: sent };
   if (r.status === 404) throw { code: "nofn" };
-  if (!r.ok) throw { code: "srv", status: r.status, message: d.error };
+  if (!r.ok) throw { code: "srv", status: r.status, message: d.error, detail: d.detail, hint: d.hint };
   return d;
 }
-const apiErr = (e) => e.code === "nofn" ? "De serverfunctie is niet gevonden." : e.code === "pw" ? "Het wachtwoord klopt niet." : (e.message || "Geen verbinding met de server.");
+const apiErr = (e) => e.code === "nofn" ? "De serverfunctie is niet gevonden." : e.code === "pw" ? "Het wachtwoord klopt niet." : ((e.message || "Geen verbinding met de server.") + (e.detail ? " — " + e.detail : "") + (e.hint ? " [" + e.hint + "]" : ""));
 
 function getPw() {
   if (PWMEM) return PWMEM;

@@ -1,13 +1,39 @@
 {
   "routes": [
-    { "route": "/tests/*", "statusCode": 404 },
-    { "route": "/*", "allowedRoles": ["authenticated"] }
+    {
+      "route": "/tests/*",
+      "statusCode": 404
+    },
+    {
+      "route": "/*",
+      "allowedRoles": [
+        "authenticated"
+      ]
+    }
   ],
   "responseOverrides": {
-    "401": { "redirect": "/.auth/login/aad", "statusCode": 302 }
+    "401": {
+      "redirect": "/.auth/login/aad",
+      "statusCode": 302
+    }
   },
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/api/*", "/css/*", "/js/*"]
+    "exclude": [
+      "/api/*",
+      "/css/*",
+      "/js/*"
+    ]
+  },
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/0afd5102-e2f5-4162-a25d-e347f3407dac/v2.0",
+          "clientIdSettingName": "AAD_CLIENT_ID",
+          "clientSecretSettingName": "AAD_CLIENT_SECRET"
+        }
+      }
+    }
   }
 }
